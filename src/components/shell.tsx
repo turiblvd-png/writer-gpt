@@ -17,7 +17,7 @@ interface NavItem {
 
 const CREATE: NavItem[] = [
   { href: '/generate', label: 'Generate Content', icon: IconSpark },
-  { href: '/semantic', label: 'Semantic Writer', icon: IconHub, badge: 'Soon' },
+  { href: '/semantic', label: 'Semantic Writer', icon: IconHub },
   { href: '/humanizer', label: 'Humanizer', icon: IconWand, badge: 'Soon', disabled: true },
   { href: '/rewrite', label: 'Rewrite from URL', icon: IconLink, badge: 'Soon', disabled: true },
 ];

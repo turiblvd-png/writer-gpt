@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { configuredProviders } from '@/lib/ai';
-import { SEMANTIC_WRITER_READY } from '@/lib/pipelines/semantic-writer';
+import { STEPS } from '@/lib/semantic/steps';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -11,7 +11,7 @@ export async function GET() {
     providers: configuredProviders(),
     tools: {
       'generate-content': 'ready',
-      'semantic-writer': SEMANTIC_WRITER_READY ? 'ready' : 'awaiting-steps',
+      'semantic-writer': { status: 'ready', stages: STEPS.length },
       humanizer: 'not-built',
       'rewrite-url': 'not-built',
     },

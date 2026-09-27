@@ -5,7 +5,7 @@ AI SEO content engine. Four tools on one research-grounded pipeline.
 | Tool | Status |
 | --- | --- |
 | **Generate Content** | Working — 6-step grounded pipeline |
-| **Semantic Writer** | Engine built, 14 step definitions pending |
+| **Semantic Writer** | Working — 14-stage workspace |
 | **Humanizer** | Not built |
 | **Rewrite from URL** | Not built |
 
@@ -23,9 +23,10 @@ Without a key the UI runs and the SEO tooling works; generation returns a clear
 503 rather than failing obscurely.
 
 ```bash
-npm test                # 38 tests, no network or API key needed
+npm test                # 80 tests, no network or API key needed
 npm run typecheck
-node scripts/seed.mjs   # loads a sample article to inspect the SEO panels
+node scripts/seed.mjs            # sample article, to inspect the SEO panels
+node scripts/seed-semantic.mjs   # sample Semantic Writer project with a real corpus
 ```
 
 ## Why it is built this way
@@ -61,7 +62,8 @@ prompt tweaks:
 src/lib/
   ai/          provider-agnostic LLM contract; Gemini + OpenAI-compatible adapters
   pipeline/    step engine: state threading, progress, cancellation, resume
-  pipelines/   concrete pipelines (generate-content, semantic-writer)
+  pipelines/   concrete pipelines (generate-content)
+  semantic/    the 14-stage Semantic Writer workspace
   content/     prompts, types, markdown rendering, JSON recovery
   seo/         deterministic scoring — no model call, no cost
   db/          SQLite behind a narrow repository
@@ -111,6 +113,31 @@ which drives all six steps against a scripted provider.
 needing both must split into a grounded step and a structuring step. The
 provider throws rather than silently dropping one.
 
+## Semantic Writer
+
+Fourteen stages over a persisted project, not an unattended run: the user
+triggers each action, edits and excludes results, and comes back later.
+
+`Competitor Research → Outline → Word Count → Competitor Content → Entities →
+N-Grams → NLP Keywords → Skip-Gram → Auto-Suggest → Grammar → SEO Rules →
+AI Instructions → Review → Content Editor`
+
+**Stages 6–8 call no model.** N-grams, TF-IDF salience and skip-grams are
+counted directly from the extracted competitor text. Asking an LLM to guess
+which phrases rank produces plausible invention; counting them produces facts.
+It is also free, instant and reproducible, so re-analysis after editing costs
+nothing.
+
+Everything compiles into the **mega prompt** (visible in full at stage 12 —
+nothing is hidden from the user). Entity coverage targets are derived from
+measured competitor document frequency: named by two or more ranking pages →
+required, fewer → a differentiator. Reader-first rules are placed *after* the
+SEO targets and explicitly override them.
+
+Competitor URLs are fetched server-side from user input, so `semantic/extract.ts`
+carries an SSRF guard: scheme allow-list, private/loopback/link-local block,
+per-hop redirect revalidation, and a response size cap.
+
 ## Known limits
 
 - **Runs live in process memory.** Fine for one instance; horizontal scaling
@@ -121,4 +148,11 @@ provider throws rather than silently dropping one.
 - **Model IDs drift.** Defaults in `src/lib/ai/index.ts` are overridable by env.
 - **A failed run is not yet resumable from the UI** — the snapshot preserves
   completed steps, but no "resume" button is wired.
-- **Passive-voice and transition detection are English-only heuristics.**
+- **Passive-voice and transition detection are English-only heuristics.** The
+  same is true of the n-gram stop-word list, so corpus analysis is weaker for
+  non-English projects.
+- **Competitor extraction cannot read JS-rendered pages.** It parses server HTML;
+  a client-rendered article returns a clear error rather than empty text.
+- **Long generations run inside the request.** A 14-stage generate is four model
+  calls; it works, but a serverless host with a short timeout needs the run
+  moved onto the queue seam in `src/lib/runs/manager.ts`.

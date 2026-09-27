@@ -3,7 +3,7 @@ import { Shell, PageHeader } from '@/components/shell';
 import { IconDoc, IconHub, IconLink, IconSpark, IconWand } from '@/components/icons';
 import { configuredProviders } from '@/lib/ai';
 import { listArticles } from '@/lib/db/store';
-import { SEMANTIC_WRITER_READY } from '@/lib/pipelines/semantic-writer';
+import { STEPS } from '@/lib/semantic/steps';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,7 +14,7 @@ export default function DashboardPage() {
 
   const tools = [
     { href: '/generate', icon: IconSpark, title: 'Generate Content', body: 'Grounded research, then a full SEO draft in six steps.', status: 'Ready' },
-    { href: '/semantic', icon: IconHub, title: 'Semantic Writer', body: 'The 14-step entity-first pipeline. Engine built, steps pending.', status: SEMANTIC_WRITER_READY ? 'Ready' : 'Awaiting steps' },
+    { href: '/semantic', icon: IconHub, title: 'Semantic Writer', body: `${STEPS.length}-stage workspace: competitor research, entity coverage and NLP optimisation.`, status: 'Ready' },
     { href: '/humanizer', icon: IconWand, title: 'Humanizer', body: 'Rewrites drafts to read naturally without losing meaning.', status: 'Not built' },
     { href: '/rewrite', icon: IconLink, title: 'Rewrite from URL', body: 'Pulls an existing page and rebuilds it against current intent.', status: 'Not built' },
   ];

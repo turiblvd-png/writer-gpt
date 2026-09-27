@@ -1,5 +1,6 @@
 import { parse, type HTMLElement } from 'node-html-parser';
 import type { CompetitorContent, CompetitorOutline, OutlineHeading } from './types';
+import { safeDomain } from './url';
 
 /**
  * Fetches a competitor page and pulls out its heading structure and body text.
@@ -201,6 +202,8 @@ export async function extractContent(rawUrl: string): Promise<CompetitorContent>
   }
 }
 
+export { safeDomain } from './url';
+
 function dedupeHeadings(headings: OutlineHeading[]): OutlineHeading[] {
   const seen = new Set<string>();
   return headings.filter((h) => {
@@ -213,13 +216,5 @@ function dedupeHeadings(headings: OutlineHeading[]): OutlineHeading[] {
 
 const collapse = (s: string) => s.replace(/\s+/g, ' ').trim();
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
-
-export function safeDomain(raw: string): string {
-  try {
-    return new URL(raw).hostname.replace(/^www\./, '');
-  } catch {
-    return raw;
-  }
-}
 
 export { assertPublicUrl };

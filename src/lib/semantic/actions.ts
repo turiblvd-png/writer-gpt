@@ -111,6 +111,15 @@ export async function extractCompetitorContent(id: string, urls?: string[]): Pro
   const extracted = competitorContent.filter((c) => !c.error && c.words > 0);
   const patch: Partial<ProjectData> = { competitorContent };
 
+  // The corpus just changed, so every measurement derived from it is stale.
+  // Entity counts especially: they drive the required/optional split in the mega
+  // prompt, and a user who generated entities before extracting content would
+  // otherwise keep zero counts forever and get every entity filed as optional.
+  const docs: Doc[] = extracted.map((c) => ({ url: c.url, text: c.text }));
+  if (docs.length && project.data.entities.length) {
+    patch.entities = annotateEntities(project.data.entities, docs);
+  }
+
   if (extracted.length) {
     const average = Math.round(extracted.reduce((sum, c) => sum + c.words, 0) / extracted.length);
     patch.wordCount = {

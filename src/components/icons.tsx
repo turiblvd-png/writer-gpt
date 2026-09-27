@@ -20,3 +20,16 @@ export const IconAlert = (p: P) => <S {...p}><path d="M12 8v5M12 17h.01"/><circl
 export const IconChevron = (p: P) => <S {...p}><path d="m9 6 6 6-6 6"/></S>;
 export const IconClock = (p: P) => <S {...p}><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></S>;
 export const IconGlobe = (p: P) => <S {...p}><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18a15 15 0 0 1 0-18Z"/></S>;
+export const IconPlay = (p: P) => <S {...p}><path d="M7 4.5v15l12-7.5-12-7.5Z"/></S>;
+export const IconPlus = (p: P) => <S {...p}><path d="M12 5v14M5 12h14"/></S>;
+export const IconTrash = (p: P) => <S {...p}><path d="M4 7h16M10 11v6M14 11v6M5 7l1 13a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-13M9 7V4h6v3"/></S>;
+export const IconRefresh = (p: P) => <S {...p}><path d="M20 11A8 8 0 1 0 18 16"/><path d="M20 5v6h-6"/></S>;
+export const IconCopy = (p: P) => <S {...p}><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></S>;
+export const IconTag = (p: P) => <S {...p}><path d="M3 12V5a2 2 0 0 1 2-2h7l9 9-9 9-9-9Z"/><circle cx="7.5" cy="7.5" r="1.3"/></S>;
+export const IconList = (p: P) => <S {...p}><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></S>;
+export const IconTarget = (p: P) => <S {...p}><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.4"/></S>;
+export const IconBook = (p: P) => <S {...p}><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2V5Z"/><path d="M4 19a2 2 0 0 1 2-2h13"/></S>;
+export const IconEye = (p: P) => <S {...p}><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></S>;
+export const IconEdit = (p: P) => <S {...p}><path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16v4Z"/><path d="M14 6l4 4"/></S>;
+export const IconTerminal = (p: P) => <S {...p}><path d="m5 7 4 4-4 4M12 15h7"/><rect x="2" y="3" width="20" height="18" rx="2"/></S>;
+export const IconGraph = (p: P) => <S {...p}><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="17" cy="17" r="2.5"/><path d="M8 16.5 15.8 7.7M8.4 18.3l6.2-.9"/></S>;
