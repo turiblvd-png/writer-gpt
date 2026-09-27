@@ -13,6 +13,7 @@ import { slugify } from '@/lib/content/slug';
 import type { ArticleMeta, Claim, GenerateInput, GenerateState } from '@/lib/content/types';
 import type { Pipeline, StepContext } from '@/lib/pipeline/types';
 import { analyseDocument } from '@/lib/seo/text';
+import { enforceStyle } from '@/lib/style/repair';
 
 type Ctx = StepContext<GenerateState>;
 
@@ -122,11 +123,29 @@ export const generateContentPipeline: Pipeline<GenerateState> = {
           maxOutputTokens: Math.min(32000, Math.ceil(input.targetWords * 3)),
         });
 
-        const markdown = stripFences(res.text);
+        // Measure the draft and repair whatever still reads as machine output.
+        // The prompt asks for natural writing; this is what enforces it.
+        const enforced = await enforceStyle(stripFences(res.text), {
+          clock: ctx.clock,
+          language: input.language,
+          signal: ctx.signal,
+          onProgress: (m) => ctx.log(m),
+        });
+
+        const markdown = enforced.markdown;
         const stats = analyseDocument(markdown);
-        ctx.log(`Draft complete: ${stats.words} words, ${stats.h2} H2s.`);
+        ctx.log(
+          `Draft complete: ${stats.words} words, ${stats.h2} H2s, ` +
+          `human score ${enforced.after.humanScore}/100` +
+          (enforced.rounds ? ` after ${enforced.rounds} style repair(s)` : ''),
+        );
 
         const warnings = [...ctx.state.warnings];
+        if (enforced.stillFlagged) {
+          warnings.push(
+            `Draft still reads as AI-written (${enforced.after.humanScore}/100). Run it through the Humanizer.`,
+          );
+        }
         // Flag rather than silently re-running: a short draft is often a better
         // article, and the user should decide whether to pay for another pass.
         if (stats.words < input.targetWords * 0.6) {

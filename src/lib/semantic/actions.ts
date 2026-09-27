@@ -3,6 +3,8 @@ import { extractJson } from '@/lib/content/json';
 import { makeClock } from '@/lib/pipeline/engine';
 import { slugify } from '@/lib/content/slug';
 import { analyseDocument } from '@/lib/seo/text';
+import { enforceStyle } from '@/lib/style/repair';
+import { detectTells } from '@/lib/style/detect';
 import { extractContent, extractOutline } from './extract';
 import { annotateEntities, extractNGrams, extractNlpKeywords, extractSkipGrams, type Doc } from './nlp';
 import { buildMegaPrompt } from './megaprompt';
@@ -294,7 +296,13 @@ export async function generateArticle(id: string, onProgress?: GenerateProgress)
     maxOutputTokens: Math.min(32000, Math.ceil(project.data.wordCount.target * 3)),
   });
 
-  const markdown = stripFences(draft.text);
+  onProgress?.('style', 'Checking for AI writing patterns…');
+  const enforced = await enforceStyle(stripFences(draft.text), {
+    clock,
+    language: project.language,
+    onProgress: (m) => onProgress?.('style', m),
+  });
+  const markdown = enforced.markdown;
 
   onProgress?.('metadata', 'Generating SEO metadata…');
   let seoTitle = firstHeading(markdown) || project.name;
@@ -343,6 +351,7 @@ export async function generateArticle(id: string, onProgress?: GenerateProgress)
     slug,
     generatedAt: Date.now(),
     unverifiedClaims,
+    humanScore: enforced.after.humanScore,
   };
 
   onProgress?.('done', `${analyseDocument(markdown).words} words written.`);

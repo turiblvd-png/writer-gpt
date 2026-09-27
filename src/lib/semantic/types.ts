@@ -96,6 +96,8 @@ export interface ArticleOutput {
   generatedAt: number;
   /** Populated by the review stage; each is a claim the model could not support. */
   unverifiedClaims?: string[];
+  /** 0–100 from the AI-tell detector, after any style repair rounds. */
+  humanScore?: number;
 }
 
 /** Everything the 14 stages accumulate. Each key belongs to one stage. */

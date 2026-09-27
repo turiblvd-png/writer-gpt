@@ -1,12 +1,8 @@
 import type { RunClock } from '@/lib/pipeline/types';
+import { systemPreamble } from '@/lib/style/rules';
 import type { CompetitorOutline, SemanticProject } from './types';
 
-const rules = (clock: RunClock, language: string) =>
-  [
-    `Today is ${clock.today}. The current year is ${clock.year}.`,
-    `Respond in ${language}.`,
-    'Never invent specifics. If a detail is not in the supplied material, leave it out.',
-  ].join(' ');
+const rules = (clock: RunClock, language: string) => systemPreamble(clock, language);
 
 export function combineOutlinesPrompt(
   project: SemanticProject,

@@ -82,9 +82,20 @@ describe('buildMegaPrompt', () => {
 
   it('subordinates SEO targets to the reader', () => {
     const prompt = buildMegaPrompt(project(), clock);
-    const readerFirst = prompt.indexOf('WRITE FOR THE READER FIRST');
-    expect(readerFirst).toBeGreaterThan(prompt.indexOf('SEO TARGETS'));
-    expect(prompt).toContain('If following a keyword target makes a sentence worse, the sentence wins');
+    expect(prompt.indexOf('WRITE FOR THE READER FIRST')).toBeGreaterThan(prompt.indexOf('SEO TARGETS'));
+    expect(prompt).toContain('If hitting a keyword target makes a sentence worse, the sentence wins');
+  });
+
+  it('carries the shared house style, including the em dash ban', () => {
+    const prompt = buildMegaPrompt(project(), clock);
+    expect(prompt).toContain('Never use an em dash');
+    expect(prompt).toContain('delve into');
+    expect(prompt).toContain('BUILT TO BE QUOTED BY SEARCH AND AI ANSWERS');
+    expect(prompt).toContain("PARSEABLE BY GOOGLE'S NATURAL LANGUAGE API");
+    // Rewrites must beat their sources rather than echo them.
+    expect(prompt).toContain('OUTRANK THE SOURCES');
+    // Factual limits come last so they are the freshest instruction.
+    expect(prompt.indexOf('FACTUAL LIMITS')).toBeGreaterThan(prompt.indexOf('WRITE FOR THE READER FIRST'));
   });
 
   it('caps injected items so the brief stays usable', () => {

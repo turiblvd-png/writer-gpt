@@ -1,4 +1,5 @@
 import type { RunClock } from '@/lib/pipeline/types';
+import { houseStyle } from '@/lib/style/rules';
 import type { SemanticProject } from './types';
 
 /**
@@ -135,22 +136,21 @@ export function buildMegaPrompt(
 
   const g = data.grammar;
   sections.push(
-    section('VOICE & STYLE', [
+    section('PROJECT VOICE', [
       `Tone: ${g.tone}`,
       `Point of view: ${pov(g.pointOfView)}`,
       `Reading level: ${g.readingLevel}`,
-      g.sentenceVariety ? 'Vary sentence length deliberately. Follow a long sentence with a short one.' : '',
-      '',
-      'Never use these phrases — they are the clearest signal that nobody with expertise wrote the page:',
-      g.avoidPhrases.map((p) => `"${p}"`).join(', '),
-    ].filter(Boolean)),
+      ...(g.avoidPhrases.length
+        ? ['', 'Additional phrases this project bans:', g.avoidPhrases.map((p) => `"${p}"`).join(', ')]
+        : []),
+    ]),
   );
 
   const s = data.seoRules;
   sections.push(
     section('SEO TARGETS', [
       `Keyword density: about ${s.targetKeywordDensity}% for "${mainKeyword}". Going over reads as stuffing and is penalised.`,
-      `At least ${s.minTransitionRatio}% of sentences should open with a transition word.`,
+      `At least ${s.minTransitionRatio}% of sentences should use a transition, though most should still open with the subject.`,
       `No more than ${s.maxPassiveRatio}% of sentences in passive voice.`,
       s.includeKeyTakeaways ? '- Open with a short key-takeaways block that answers the query immediately.' : '',
       s.includeTables ? '- Use a markdown table wherever comparison genuinely helps. Do not add one for decoration.' : '',
@@ -160,28 +160,9 @@ export function buildMegaPrompt(
     ].filter(Boolean)),
   );
 
-  sections.push(
-    section('WRITE FOR THE READER FIRST', [
-      'Every rule above is subordinate to this one. If following a keyword target makes a sentence worse, the sentence wins.',
-      '',
-      '- Answer the question in the first two sentences. No preamble, no restating the title.',
-      '- Give specifics: dates, numbers, names, steps. Vague advice is worthless and ranks accordingly.',
-      '- Cut any sentence that carries no information. Padding to hit a word count is self-defeating.',
-      '- Write as somebody who has actually done this, not as somebody summarising what others wrote.',
-    ]),
-  );
-
-  sections.push(
-    section('FACTUAL LIMITS — NON-NEGOTIABLE', [
-      `It is ${clock.today}. Your training data is older than that. Never assume the most recent event, edition or release you remember is the current one.`,
-      '',
-      '- Every specific — name, date, venue, score, price, statistic, quote — must come from the research supplied above.',
-      '- If a detail is not in the brief, omit it or state plainly that it is unconfirmed. Do not resolve uncertainty by guessing.',
-      '- A plausible-sounding invented specific is the worst possible output. It is worse than leaving a gap.',
-      '- For anything that changes over time, anchor it: name the year, or write "as of <date>".',
-      '- Never fabricate a citation or attribute a claim to a source that does not support it.',
-    ]),
-  );
+  // The shared house style carries the natural-writing, AEO, NLP, reader-first
+  // and factual rules, so all four tools hold the same bar.
+  sections.push(houseStyle(clock, { originality: true }));
 
   if (data.aiInstructions.trim()) {
     sections.push(section('ADDITIONAL INSTRUCTIONS FROM THE USER', [data.aiInstructions.trim()]));

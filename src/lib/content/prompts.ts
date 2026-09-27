@@ -1,4 +1,5 @@
 import type { RunClock } from '@/lib/pipeline/types';
+import { houseStyle, systemPreamble } from '@/lib/style/rules';
 import { SEO_MODES, type GenerateInput, type SeoMode } from './types';
 
 /**
@@ -13,17 +14,7 @@ import { SEO_MODES, type GenerateInput, type SeoMode } from './types';
  *     worth more than a fluent guess.
  */
 export function baseSystem(clock: RunClock, language: string): string {
-  return [
-    `Today is ${clock.today}. The current year is ${clock.year}.`,
-    `Write in ${language}.`,
-    '',
-    'Non-negotiable rules:',
-    `- Never assume the latest event, release or edition you remember is current. It is ${clock.year}; your training data is older than that.`,
-    '- Do not invent specifics. Names, dates, venues, scores, prices, statistics and quotes must come from the supplied research. If a detail is not there, omit it or say it is unconfirmed.',
-    '- Prefer "as of <date>" phrasing over bare present tense for anything that changes.',
-    '- If you are unsure whether something is current, say so explicitly rather than stating it as fact.',
-    '- Never fabricate a citation or attribute a claim to a source that does not support it.',
-  ].join('\n');
+  return systemPreamble(clock, language);
 }
 
 export function researchPrompt(input: GenerateInput, clock: RunClock): string {
@@ -115,14 +106,11 @@ export function draftPrompt(
     `Length: about ${input.targetWords} words.`,
     `SEO mode: ${SEO_MODES[input.seoMode].label} — ${modeGuidance(input.seoMode)}`,
     '',
-    'Rules:',
+    houseStyle(clock),
+    '',
+    'Task rules:',
     '- Start with an H1, then follow the outline headings in order.',
-    '- Open with 2–3 sentences that answer the query directly. No throat-clearing.',
-    `- Every fact must trace to the research brief. If the brief marks something UNVERIFIED, either omit it or write that it is unconfirmed. Do not resolve uncertainty by guessing.`,
-    `- Anchor time-sensitive statements: write "as of ${clock.today}" or name the year, rather than bare "currently".`,
-    '- Vary sentence length. Use transition words to open roughly a third of sentences.',
-    '- Write in active voice.',
-    '- Use markdown tables where comparison genuinely helps.',
+    '- Every fact must trace to the research brief. If the brief marks something UNVERIFIED, omit it or write that it is unconfirmed.',
     input.notes ? `\nAdditional instructions from the user:\n${input.notes}` : '',
     '',
     'Return the article as markdown only. No preamble, no commentary, no code fences.',
