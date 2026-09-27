@@ -8,3 +8,4 @@ build/
 .env.local
 data/*.db
 data/*.db-*
+tsconfig.tsbuildinfo

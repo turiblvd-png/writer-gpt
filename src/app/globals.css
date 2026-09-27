@@ -1,0 +1,45 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root { --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif; }
+  html { color-scheme: dark; }
+  body { @apply bg-canvas text-ink antialiased; }
+  ::selection { @apply bg-accent/30 text-ink; }
+  *:focus-visible { @apply outline-none ring-2 ring-accent/70 ring-offset-2 ring-offset-canvas; }
+}
+
+@layer components {
+  .card { @apply rounded-2xl border border-line bg-surface; }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold
+           transition-colors disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply btn bg-gradient-to-r from-accent to-accent-2 text-accent-ink hover:brightness-110
+           disabled:from-surface-3 disabled:to-surface-3 disabled:text-ink-3;
+  }
+  .btn-ghost { @apply btn border border-line text-ink-2 hover:border-line hover:bg-surface-2 hover:text-ink; }
+  .field {
+    @apply w-full rounded-xl border border-line bg-surface-2 px-4 py-3 text-sm text-ink
+           placeholder:text-ink-3 focus:border-accent focus:outline-none;
+  }
+  .label { @apply mb-2 block text-sm font-semibold text-ink-2; }
+}
+
+/* Long-form article rendering inside the editor and preview panes. */
+.prose-article { @apply text-[15px] leading-relaxed text-ink-2; }
+.prose-article h1 { @apply mb-4 mt-8 text-2xl font-bold text-ink first:mt-0; }
+.prose-article h2 { @apply mb-3 mt-8 text-xl font-bold text-ink; }
+.prose-article h3 { @apply mb-2 mt-6 text-base font-bold text-ink; }
+.prose-article p { @apply mb-4; }
+.prose-article ul { @apply mb-4 list-disc space-y-1.5 pl-5; }
+.prose-article ol { @apply mb-4 list-decimal space-y-1.5 pl-5; }
+.prose-article strong { @apply font-semibold text-ink; }
+.prose-article a { @apply text-accent underline underline-offset-2; }
+.prose-article table { @apply mb-5 w-full border-collapse text-sm; }
+.prose-article th { @apply border border-line bg-surface-2 px-3 py-2 text-left font-semibold text-ink; }
+.prose-article td { @apply border border-line px-3 py-2 align-top; }
+.prose-article code { @apply rounded bg-surface-3 px-1.5 py-0.5 font-mono text-[13px] text-accent-2; }
+.prose-article blockquote { @apply mb-4 border-l-2 border-accent/50 pl-4 italic; }

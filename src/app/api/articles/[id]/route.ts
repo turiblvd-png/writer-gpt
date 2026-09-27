@@ -1,0 +1,28 @@
+import { NextResponse } from 'next/server';
+import { deleteArticle, getArticle } from '@/lib/db/store';
+import { analyseSeo } from '@/lib/seo/analysis';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
+export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const article = getArticle(id);
+  if (!article) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
+  const report = analyseSeo({
+    markdown: article.markdown,
+    title: article.title,
+    metaDescription: article.metaDescription,
+    focusKeyword: article.focusKeyword,
+    slug: article.slug,
+  });
+
+  return NextResponse.json({ article, report });
+}
+
+export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  deleteArticle(id);
+  return NextResponse.json({ ok: true });
+}
