@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Writer-GPT — Generate #1 Ranking Articles</title>
+<meta name="description" content="Bulk AI article writer that generates SEO-optimised, #1 ranking articles in 160+ languages. Research, write and publish at scale.">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ───────────────────────── Ticker ───────────────────────── -->
+<div class="ticker" aria-hidden="true">
+  <div class="ticker__track">
+    <div class="ticker__group">
+      <span class="chip"><svg class="i"><use href="#i-doc"/></svg><b class="count" data-count="29629">0</b>+ articles created</span>
+      <span class="chip"><svg class="i"><use href="#i-globe"/></svg>160+ languages supported</span>
+      <span class="chip"><svg class="i"><use href="#i-rocket"/></svg>AI-powered SEO content</span>
+      <span class="chip"><svg class="i"><use href="#i-flame"/></svg><i class="dot"></i>Live content generation</span>
+      <span class="chip"><svg class="i"><use href="#i-bolt"/></svg><b class="count" data-count="62203066">0</b>+ words generated</span>
+    </div>
+    <div class="ticker__group">
+      <span class="chip"><svg class="i"><use href="#i-doc"/></svg><b>29,629</b>+ articles created</span>
+      <span class="chip"><svg class="i"><use href="#i-globe"/></svg>160+ languages supported</span>
+      <span class="chip"><svg class="i"><use href="#i-rocket"/></svg>AI-powered SEO content</span>
+      <span class="chip"><svg class="i"><use href="#i-flame"/></svg><i class="dot"></i>Live content generation</span>
+      <span class="chip"><svg class="i"><use href="#i-bolt"/></svg><b>62,203,066</b>+ words generated</span>
+    </div>
+  </div>
+</div>
+
+<!-- ───────────────────────── Header ───────────────────────── -->
+<header class="hdr" id="hdr">
+  <div class="wrap hdr__in">
+    <a class="logo" href="#top">
+      <svg viewBox="0 0 48 40" class="logo__mark" aria-hidden="true">
+        <path d="M2 4h9l6 22 6-22h8l6 22 6-22h9L42 36h-9l-6-20-6 20h-9L2 4Z" fill="url(#lg)"/>
+        <defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#7DD3FC"/><stop offset="1" stop-color="#2563EB"/>
+        </linearGradient></defs>
+      </svg>
+      <span class="logo__txt">Writer-gpt<span class="logo__tld">.com</span></span>
+    </a>
+
+    <nav class="nav" id="nav">
+      <div class="nav__item has-menu">
+        <button class="nav__link" aria-expanded="false" aria-controls="megamenu">
+          Features <svg class="caret"><use href="#i-chev"/></svg>
+        </button>
+        <div class="mega" id="megamenu">
+          <a href="#features"><svg class="i"><use href="#i-bolt"/></svg><span><b>Bulk Article Writer</b><em>Queue 500 articles in one run</em></span></a>
+          <a href="#features"><svg class="i"><use href="#i-search"/></svg><span><b>Keyword Research</b><em>Live SERP + volume data</em></span></a>
+          <a href="#features"><svg class="i"><use href="#i-globe"/></svg><span><b>160+ Languages</b><em>Native-grade localisation</em></span></a>
+          <a href="#features"><svg class="i"><use href="#i-link"/></svg><span><b>Auto Internal Links</b><em>Crawls and links your site</em></span></a>
+          <a href="#features"><svg class="i"><use href="#i-img"/></svg><span><b>AI Images</b><em>Licence-free visuals inline</em></span></a>
+          <a href="#integrations"><svg class="i"><use href="#i-plug"/></svg><span><b>1-Click Publishing</b><em>WordPress, Webflow, Shopify</em></span></a>
+        </div>
+      </div>
+      <a class="nav__link" href="#pricing">Pricing</a>
+      <a class="nav__link" href="#guides">Guides</a>
+      <!-- shown only inside the mobile sheet; the header keeps its own copies on desktop -->
+      <a class="nav__link nav__only-sm" href="#login">Log in</a>
+      <a class="btn btn--primary nav__cta nav__only-sm" href="#pricing">Set up workspace <svg class="i"><use href="#i-arrow"/></svg></a>
+    </nav>
+
+    <div class="hdr__cta">
+      <a class="btn btn--ghost hide-sm" href="#login">Log in</a>
+      <a class="btn btn--primary" href="#pricing">Set up workspace <svg class="i"><use href="#i-arrow"/></svg></a>
+      <button class="icon-btn hide-sm" id="langBtn" aria-label="Change language">
+        <svg class="i"><use href="#i-globe"/></svg><span class="lang">GB EN</span>
+      </button>
+      <button class="icon-btn" id="themeBtn" aria-label="Toggle colour theme">
+        <svg class="i"><use href="#i-sun"/></svg>
+      </button>
+      <button class="icon-btn burger" id="burger" aria-label="Open menu" aria-expanded="false">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main id="top">
+
+<!-- ───────────────────────── Hero ───────────────────────── -->
+<section class="hero">
+  <div class="hero__grid" aria-hidden="true"></div>
+  <div class="hero__glow" aria-hidden="true"></div>
+
+  <div class="wrap hero__in">
+    <a class="badge" href="#pricing">
+      <svg class="i"><use href="#i-spark"/></svg>
+      <span>#1 Bulk Article Writer Tool</span> <i>•</i> <span>2M+ Users Worldwide</span>
+    </a>
+
+    <h1 class="hero__h1">
+      Generate <span class="grad">#1 Ranking</span><br>
+      Articles<br>
+      <span class="hero__type">and rank in <span id="typed" class="typed"></span><span class="caret-blink"></span></span>
+    </h1>
+
+    <p class="hero__sub">
+      Writer-GPT researches the SERP, writes the article and publishes it to your CMS —
+      hundreds at a time, in any of 160+ languages, with sources, schema and internal links built in.
+    </p>
+
+    <div class="hero__actions">
+      <a class="btn btn--primary btn--lg" href="#pricing">Set up workspace <svg class="i"><use href="#i-arrow"/></svg></a>
+      <a class="btn btn--outline btn--lg" href="#how">See how it works</a>
+    </div>
+
+    <p class="hero__note"><svg class="i"><use href="#i-check"/></svg> 3 free articles · No credit card required · Cancel anytime</p>
+
+    <div class="hero__stats">
+      <div><b class="count" data-count="29629">0</b><span>Articles created</span></div>
+      <div><b class="count" data-count="62203066">0</b><span>Words generated</span></div>
+      <div><b>160+</b><span>Languages</span></div>
+      <div><b>4.8/5</b><span>Average rating</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── Logos ───────────────────────── -->
+<section class="logos">
+  <div class="wrap">
+    <p class="logos__label">Trusted by content teams and agencies worldwide</p>
+    <div class="logos__row">
+      <span>NORTHWIND</span><span>Acme SEO</span><span>Contently</span>
+      <span>RankLabs</span><span>Voxel</span><span>Meridian</span>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── Features ───────────────────────── -->
+<section class="sec" id="features">
+  <div class="wrap">
+    <div class="sec__head">
+      <span class="eyebrow">Features</span>
+      <h2>Everything you need to rank, in one workspace</h2>
+      <p>Stop stitching together six tools. Research, write, optimise and publish from a single run.</p>
+    </div>
+
+    <div class="cards">
+      <article class="card card--wide">
+        <svg class="card__i"><use href="#i-bolt"/></svg>
+        <h3>Bulk article generation</h3>
+        <p>Paste a list of keywords — or import a whole sitemap — and queue up to 500 full-length articles in a single run. Writer-GPT handles outlining, drafting and formatting while you do something else.</p>
+        <ul class="ticks">
+          <li>CSV and sitemap import</li><li>Parallel generation queue</li><li>Per-article tone and length</li>
+        </ul>
+      </article>
+
+      <article class="card">
+        <svg class="card__i"><use href="#i-search"/></svg>
+        <h3>Live SERP research</h3>
+        <p>Every article is written against the top 10 results for its keyword, so the outline covers what actually ranks today.</p>
+      </article>
+
+      <article class="card">
+        <svg class="card__i"><use href="#i-globe"/></svg>
+        <h3>160+ languages</h3>
+        <p>Native-grade output, not translation. Localised idiom, currency and search intent for every market you sell in.</p>
+      </article>
+
+      <article class="card">
+        <svg class="card__i"><use href="#i-link"/></svg>
+        <h3>Automatic internal links</h3>
+        <p>We crawl your site once, then link every new article into the right existing pages with relevant anchor text.</p>
+      </article>
+
+      <article class="card">
+        <svg class="card__i"><use href="#i-shield"/></svg>
+        <h3>Facts with sources</h3>
+        <p>Claims are grounded in cited sources and rendered with schema markup, so reviewers can check the work.</p>
+      </article>
+
+      <article class="card card--wide">
+        <svg class="card__i"><use href="#i-plug"/></svg>
+        <h3>Publish where you already work</h3>
+        <p>One-click publishing to WordPress, Webflow, Shopify, Ghost and Notion — or pull everything through the REST API. Schedule drafts, set categories and push images with the post.</p>
+        <ul class="ticks">
+          <li>WordPress &amp; Webflow</li><li>Shopify &amp; Ghost</li><li>REST API + webhooks</li>
+        </ul>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── How it works ───────────────────────── -->
+<section class="sec sec--alt" id="how">
+  <div class="wrap">
+    <div class="sec__head">
+      <span class="eyebrow">How it works</span>
+      <h2>From keyword to published post in three steps</h2>
+    </div>
+    <ol class="steps">
+      <li><span class="steps__n">01</span><h3>Add your keywords</h3><p>Type them, paste a CSV, or let Writer-GPT suggest clusters from your domain and your competitors.</p></li>
+      <li><span class="steps__n">02</span><h3>Pick tone and format</h3><p>Choose length, reading level, brand voice and structure. Save it as a preset and reuse it on every run.</p></li>
+      <li><span class="steps__n">03</span><h3>Generate and publish</h3><p>Review in the editor or send straight to your CMS on a schedule. Images, links and schema come along.</p></li>
+    </ol>
+  </div>
+</section>
+
+<!-- ───────────────────────── Testimonials ───────────────────────── -->
+<section class="sec" id="testimonials">
+  <div class="wrap">
+    <div class="sec__head">
+      <span class="eyebrow">Testimonials</span>
+      <h2>Loved by SEOs, agencies and solo founders</h2>
+    </div>
+    <div class="quotes">
+      <figure class="quote">
+        <div class="stars">★★★★★</div>
+        <blockquote>We went from 12 posts a month to 180 without adding a single writer. Three of them hit page one in six weeks.</blockquote>
+        <figcaption><b>Dana R.</b><span>Head of Content, RankLabs</span></figcaption>
+      </figure>
+      <figure class="quote">
+        <div class="stars">★★★★★</div>
+        <blockquote>The internal linking alone paid for the plan. It found connections across 400 old posts that we never would have mapped by hand.</blockquote>
+        <figcaption><b>Marc T.</b><span>Founder, Meridian Studio</span></figcaption>
+      </figure>
+      <figure class="quote">
+        <div class="stars">★★★★★</div>
+        <blockquote>We publish in nine languages. This is the first tool where the German output didn't read like it was translated.</blockquote>
+        <figcaption><b>Sofia L.</b><span>SEO Lead, Voxel</span></figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── Pricing ───────────────────────── -->
+<section class="sec sec--alt" id="pricing">
+  <div class="wrap">
+    <div class="sec__head">
+      <span class="eyebrow">Pricing</span>
+      <h2>Simple plans that scale with your output</h2>
+      <p>Every plan includes 160+ languages, SERP research and one-click publishing.</p>
+    </div>
+
+    <div class="toggle" role="group" aria-label="Billing period">
+      <button class="toggle__b is-on" data-cycle="month">Monthly</button>
+      <button class="toggle__b" data-cycle="year">Yearly <i>−20%</i></button>
+    </div>
+
+    <div class="plans">
+      <article class="plan">
+        <h3>Starter</h3>
+        <p class="plan__d">For solo creators testing the waters.</p>
+        <p class="plan__p"><span class="cur">$</span><b data-month="19" data-year="15">19</b><span class="per">/mo</span></p>
+        <a class="btn btn--outline btn--block" href="#signup">Start free</a>
+        <ul class="ticks">
+          <li>25 articles / month</li><li>Up to 2,000 words each</li><li>SERP research</li>
+          <li>1 publishing integration</li><li>Email support</li>
+        </ul>
+      </article>
+
+      <article class="plan plan--best">
+        <span class="plan__tag">Most popular</span>
+        <h3>Growth</h3>
+        <p class="plan__d">For teams publishing every week.</p>
+        <p class="plan__p"><span class="cur">$</span><b data-month="79" data-year="63">79</b><span class="per">/mo</span></p>
+        <a class="btn btn--primary btn--block" href="#signup">Set up workspace</a>
+        <ul class="ticks">
+          <li>200 articles / month</li><li>Up to 5,000 words each</li><li>Bulk runs &amp; CSV import</li>
+          <li>Automatic internal links</li><li>AI images included</li><li>All integrations</li><li>Priority support</li>
+        </ul>
+      </article>
+
+      <article class="plan">
+        <h3>Agency</h3>
+        <p class="plan__d">For agencies running many sites.</p>
+        <p class="plan__p"><span class="cur">$</span><b data-month="249" data-year="199">249</b><span class="per">/mo</span></p>
+        <a class="btn btn--outline btn--block" href="#contact">Talk to sales</a>
+        <ul class="ticks">
+          <li>Unlimited articles</li><li>Unlimited workspaces</li><li>Client seats &amp; white label</li>
+          <li>REST API + webhooks</li><li>Dedicated manager</li>
+        </ul>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── Guides / FAQ ───────────────────────── -->
+<section class="sec" id="guides">
+  <div class="wrap wrap--narrow">
+    <div class="sec__head">
+      <span class="eyebrow">Guides</span>
+      <h2>Frequently asked questions</h2>
+    </div>
+    <div class="faq">
+      <details open><summary>Will Google penalise AI-generated articles?<svg class="i"><use href="#i-chev"/></svg></summary>
+        <p>Google rewards helpful, original content regardless of how it was produced. Writer-GPT grounds every article in live SERP research and cited sources, and gives you an editor to review before anything is published.</p></details>
+      <details><summary>How long does one article take?<svg class="i"><use href="#i-chev"/></svg></summary>
+        <p>A 2,000-word article takes about 60–90 seconds. Bulk runs generate in parallel, so 100 articles typically finish in under 20 minutes.</p></details>
+      <details><summary>Can I use my own brand voice?<svg class="i"><use href="#i-chev"/></svg></summary>
+        <p>Yes. Upload a few existing posts or a style guide and Writer-GPT builds a reusable voice profile you can apply to any run.</p></details>
+      <details><summary>Which CMS platforms do you support?<svg class="i"><use href="#i-chev"/></svg></summary>
+        <p>WordPress, Webflow, Shopify, Ghost and Notion out of the box, plus a REST API and webhooks for anything else.</p></details>
+      <details><summary>What happens to unused articles?<svg class="i"><use href="#i-chev"/></svg></summary>
+        <p>Monthly allowances reset on your billing date. Yearly plans roll unused credits forward for up to three months.</p></details>
+      <details><summary>Can I cancel at any time?<svg class="i"><use href="#i-chev"/></svg></summary>
+        <p>Yes — cancel from the billing page in one click. You keep access until the end of the period you've paid for, and every article you generated stays yours.</p></details>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── CTA ───────────────────────── -->
+<section class="cta" id="signup">
+  <div class="wrap cta__in">
+    <h2>Start ranking this month</h2>
+    <p>Three free articles, no credit card. See what a full SERP-researched draft looks like before you pay for anything.</p>
+    <form class="cta__form" id="signupForm" novalidate>
+      <label class="sr-only" for="email">Work email</label>
+      <input id="email" name="email" type="email" placeholder="you@company.com" autocomplete="email" required>
+      <button class="btn btn--primary" type="submit">Set up workspace <svg class="i"><use href="#i-arrow"/></svg></button>
+    </form>
+    <p class="cta__msg" id="signupMsg" role="status"></p>
+  </div>
+</section>
+
+</main>
+
+<!-- ───────────────────────── Footer ───────────────────────── -->
+<footer class="ftr" id="integrations">
+  <div class="wrap ftr__in">
+    <div class="ftr__brand">
+      <a class="logo" href="#top">
+        <svg viewBox="0 0 48 40" class="logo__mark" aria-hidden="true"><path d="M2 4h9l6 22 6-22h8l6 22 6-22h9L42 36h-9l-6-20-6 20h-9L2 4Z" fill="url(#lg)"/></svg>
+        <span class="logo__txt">Writer-gpt<span class="logo__tld">.com</span></span>
+      </a>
+      <p>Bulk AI article writing for teams that need to publish more than they can write.</p>
+    </div>
+    <nav class="ftr__cols">
+      <div><h4>Product</h4><a href="#features">Features</a><a href="#pricing">Pricing</a><a href="#how">How it works</a><a href="#integrations">Integrations</a></div>
+      <div><h4>Resources</h4><a href="#guides">Guides</a><a href="#guides">FAQ</a><a href="#guides">Blog</a><a href="#guides">API docs</a></div>
+      <div><h4>Company</h4><a href="#about">About</a><a href="#contact">Contact</a><a href="#about">Careers</a><a href="#about">Affiliates</a></div>
+      <div><h4>Legal</h4><a href="#legal">Privacy Policy</a><a href="#legal">Terms of Service</a><a href="#legal">Cookie Policy</a><a href="#legal">GDPR</a></div>
+    </nav>
+  </div>
+  <div class="wrap ftr__bar">
+    <p>© <span id="yr">2026</span> Writer-GPT. All rights reserved.</p>
+    <p class="ftr__note">Demo replica built for design reference — not affiliated with writer-gpt.com.</p>
+  </div>
+</footer>
+
+<!-- ───────────────────────── Cookie banner ───────────────────────── -->
+<div class="cookie" id="cookie" role="dialog" aria-label="Cookie preferences" hidden>
+  <div class="cookie__box">
+    <svg class="cookie__i"><use href="#i-shield"/></svg>
+    <p>We use cookies to improve your experience and analyze site traffic. <a href="#legal">Privacy Policy</a></p>
+    <div class="cookie__acts">
+      <button class="btn btn--ghost" data-cookie="manage">Manage <svg class="i"><use href="#i-chev"/></svg></button>
+      <button class="btn btn--outline" data-cookie="reject">Reject</button>
+      <button class="btn btn--primary" data-cookie="accept">Accept All</button>
+    </div>
+  </div>
+</div>
+
+<!-- ───────────────────────── Icon sprite ───────────────────────── -->
+<svg style="display:none" aria-hidden="true">
+  <symbol id="i-doc" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Zm0 2 4 4h-4V4ZM8 13h8v2H8v-2Zm0 4h8v2H8v-2Z"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm6.9 9h-3a15 15 0 0 0-1.2-5.3A8 8 0 0 1 18.9 11ZM12 4.1c.8 1.2 1.6 3.5 1.8 6.9h-3.6c.2-3.4 1-5.7 1.8-6.9ZM5.1 11a8 8 0 0 1 4.2-5.3A15 15 0 0 0 8.1 11h-3Zm0 2h3a15 15 0 0 0 1.2 5.3A8 8 0 0 1 5.1 13ZM12 19.9c-.8-1.2-1.6-3.5-1.8-6.9h3.6c-.2 3.4-1 5.7-1.8 6.9Zm2.7-1.6a15 15 0 0 0 1.2-5.3h3a8 8 0 0 1-4.2 5.3Z"/></symbol>
+  <symbol id="i-rocket" viewBox="0 0 24 24"><path d="M14 3c3.5 0 7 3.5 7 7-1.6 4-4.4 6.4-7 7.8V21l-4-2-2-4H4c1.4-2.6 3.8-5.4 7.8-7C13 6.6 14 5 14 3Zm1.5 4a1.8 1.8 0 1 0 0 3.6 1.8 1.8 0 0 0 0-3.6Z"/></symbol>
+  <symbol id="i-flame" viewBox="0 0 24 24"><path d="M12 2s5 4.2 5 9a5 5 0 0 1-10 0c0-1.3.4-2.4 1-3.3 0 1.4.8 2.3 1.8 2.3 1.3 0 2.2-1.2 2.2-3C12 5.4 12 3.6 12 2Z"/></symbol>
+  <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z"/></symbol>
+  <symbol id="i-spark" viewBox="0 0 24 24"><path d="m12 2 2.2 6.2L20 10l-5.8 1.8L12 18l-2.2-6.2L4 10l5.8-1.8L12 2Zm7 10 1 2.6 2.6 1-2.6 1L19 20l-1-2.6-2.6-1 2.6-1L19 12Z"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><path d="M10 2a8 8 0 1 0 4.9 14.3l5.4 5.4 1.4-1.4-5.4-5.4A8 8 0 0 0 10 2Zm0 2a6 6 0 1 1 0 12 6 6 0 0 1 0-12Z"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24"><path d="M10.6 13.4a1 1 0 0 1 0-1.4l1.4-1.4a1 1 0 0 1 1.4 1.4l-1.4 1.4a1 1 0 0 1-1.4 0ZM8 16a4 4 0 0 1 0-5.7l2.8-2.8 1.4 1.4L9.4 11.7a2 2 0 0 0 2.9 2.9l2.8-2.8 1.4 1.4-2.8 2.8A4 4 0 0 1 8 16Zm8-8a4 4 0 0 1 0 5.7l-.7.7-1.4-1.4.7-.7a2 2 0 0 0-2.9-2.9l-.7.7-1.4-1.4.7-.7A4 4 0 0 1 16 8Z"/></symbol>
+  <symbol id="i-img" viewBox="0 0 24 24"><path d="M4 4h16a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Zm1 2v9l4.5-4.5 4 4L16 12l3 3V6H5Zm3.5 1a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Z"/></symbol>
+  <symbol id="i-plug" viewBox="0 0 24 24"><path d="M9 2v6H7V2H9Zm8 0v6h-2V2h2ZM5 9h14v3a7 7 0 0 1-6 6.9V22h-2v-3.1A7 7 0 0 1 5 12V9Z"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3Zm-1 13-3-3 1.4-1.4L11 12.2l4.6-4.6L17 9l-6 6Z"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2Z"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M7 17 17 7m0 0H9m8 0v8" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="M12 15.5 5.5 9 7 7.5l5 5 5-5L18.5 9 12 15.5Z"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><path d="M12 17a5 5 0 1 1 0-10 5 5 0 0 1 0 10Zm0-13V1m0 22v-3M4 12H1m22 0h-3M5.6 5.6 3.5 3.5m17 17-2.1-2.1M5.6 18.4l-2.1 2.1m17-17-2.1 2.1" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></symbol>
+</svg>
+
+<script src="script.js"></script>
+</body>
+</html>
