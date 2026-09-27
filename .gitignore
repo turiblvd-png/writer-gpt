@@ -1,3 +1,10 @@
 node_modules/
-.DS_Store
+.next/
+out/
+build/
 *.log
+.DS_Store
+.env
+.env.local
+data/*.db
+data/*.db-*
