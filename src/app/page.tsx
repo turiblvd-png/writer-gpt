@@ -15,8 +15,8 @@ export default function DashboardPage() {
   const tools = [
     { href: '/generate', icon: IconSpark, title: 'Generate Content', body: 'Grounded research, then a full SEO draft in six steps.', status: 'Ready' },
     { href: '/semantic', icon: IconHub, title: 'Semantic Writer', body: `${STEPS.length}-stage workspace: competitor research, entity coverage and NLP optimisation.`, status: 'Ready' },
-    { href: '/humanizer', icon: IconWand, title: 'Humanizer', body: 'Rewrites drafts to read naturally without losing meaning.', status: 'Not built' },
-    { href: '/rewrite', icon: IconLink, title: 'Rewrite from URL', body: 'Pulls an existing page and rebuilds it against current intent.', status: 'Not built' },
+    { href: '/humanizer', icon: IconWand, title: 'Humanizer', body: 'Scores a draft for AI tells, then rewrites until it reads human.', status: 'Ready' },
+    { href: '/rewrite', icon: IconLink, title: 'Rewrite from URL', body: 'Extracts a page\u2019s facts and rebuilds it in your voice, measured for originality.', status: 'Ready' },
   ];
 
   return (

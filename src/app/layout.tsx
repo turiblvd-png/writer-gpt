@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Writer-GPT — AI SEO Content Engine',
+  title: 'Writer-GPT, AI SEO Content Engine',
   description: 'Research-grounded AI article generation with semantic SEO optimisation.',
 };
 

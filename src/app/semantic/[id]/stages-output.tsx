@@ -24,9 +24,9 @@ export function GrammarStage({ api }: { api: StageApi }) {
 
         <label className="label mt-4" htmlFor="pov">Point of view</label>
         <select id="pov" className="field" value={g.pointOfView} onChange={(e) => set({ pointOfView: e.target.value as typeof g.pointOfView })}>
-          <option value="second-person">Second person — &ldquo;you&rdquo;</option>
-          <option value="first-person-plural">First person plural — &ldquo;we&rdquo;</option>
-          <option value="third-person">Third person — neither</option>
+          <option value="second-person">Second person, &ldquo;you&rdquo;</option>
+          <option value="first-person-plural">First person plural, &ldquo;we&rdquo;</option>
+          <option value="third-person">Third person, neither</option>
         </select>
 
         <label className="label mt-4" htmlFor="level">Reading level</label>
@@ -94,20 +94,20 @@ export function SeoRulesStage({ api }: { api: StageApi }) {
     <>
       <Panel icon={<IconSpark />} title="Measurable targets" subtitle="The draft is written to hit these, then scored against them.">
         <label className="label" htmlFor="density">
-          Keyword density — <span className="font-mono text-accent">{s.targetKeywordDensity}%</span>
+          Keyword density, <span className="font-mono text-accent">{s.targetKeywordDensity}%</span>
         </label>
         <input id="density" type="range" min={0.5} max={3} step={0.1} value={s.targetKeywordDensity}
                onChange={(e) => set({ targetKeywordDensity: Number(e.target.value) })} className="w-full accent-accent" />
         <p className="mt-1 text-xs text-ink-3">Above roughly 2.5% reads as stuffing and is penalised.</p>
 
         <label className="label mt-5" htmlFor="trans">
-          Minimum transition words — <span className="font-mono text-accent">{s.minTransitionRatio}%</span> of sentences
+          Minimum transition words, <span className="font-mono text-accent">{s.minTransitionRatio}%</span> of sentences
         </label>
         <input id="trans" type="range" min={0} max={60} step={5} value={s.minTransitionRatio}
                onChange={(e) => set({ minTransitionRatio: Number(e.target.value) })} className="w-full accent-accent" />
 
         <label className="label mt-5" htmlFor="passive">
-          Maximum passive voice — <span className="font-mono text-accent">{s.maxPassiveRatio}%</span> of sentences
+          Maximum passive voice, <span className="font-mono text-accent">{s.maxPassiveRatio}%</span> of sentences
         </label>
         <input id="passive" type="range" min={0} max={30} step={1} value={s.maxPassiveRatio}
                onChange={(e) => set({ maxPassiveRatio: Number(e.target.value) })} className="w-full accent-accent" />
@@ -129,7 +129,7 @@ export function SeoRulesStage({ api }: { api: StageApi }) {
         <label className="label mt-5" htmlFor="internal">Internal links <span className="font-normal text-ink-3">(optional)</span></label>
         <textarea id="internal" className="field min-h-[70px] resize-y" value={s.internalLinks}
                   onChange={(e) => set({ internalLinks: e.target.value })}
-                  placeholder="/guides/tennis-calendar — Tennis calendar&#10;/tickets — Ticket guide" />
+                  placeholder="/guides/tennis-calendar Tennis calendar&#10;/tickets Ticket guide" />
       </Panel>
     </>
   );
@@ -183,7 +183,7 @@ export function AiInstructionsStage({ api }: { api: StageApi }) {
           </pre>
         ) : (
           <p className="text-sm text-ink-3">
-            Not compiled yet. Compile to see exactly what the writer will be told — nothing is hidden.
+            Not compiled yet. Compile to see exactly what the writer will be told, nothing is hidden.
           </p>
         )}
       </Panel>
@@ -294,7 +294,7 @@ export function ContentEditorStage({ api }: { api: StageApi }) {
       {article.unverifiedClaims && article.unverifiedClaims.length > 0 && (
         <Notice tone="bad">
           <p className="mb-1.5 font-semibold text-bad">
-            {article.unverifiedClaims.length} claim(s) could not be verified — check before publishing.
+            {article.unverifiedClaims.length} claim(s) could not be verified, check before publishing.
           </p>
           <ul className="space-y-1 text-xs">
             {article.unverifiedClaims.map((c) => <li key={c}>• {c}</li>)}

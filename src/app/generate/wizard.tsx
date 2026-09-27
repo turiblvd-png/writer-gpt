@@ -153,7 +153,7 @@ export function GenerateWizard() {
           </header>
 
           <label className="label" htmlFor="len">
-            Target length — <span className="font-mono text-accent">{targetWords.toLocaleString()}</span> words
+            Target length, <span className="font-mono text-accent">{targetWords.toLocaleString()}</span> words
           </label>
           <input
             id="len" type="range" min={600} max={4000} step={100} value={targetWords}
@@ -166,7 +166,7 @@ export function GenerateWizard() {
             <input type="checkbox" className="accent-accent" checked={includeFaq} onChange={(e) => setIncludeFaq(e.target.checked)} />
             <span>
               <span className="block text-sm font-semibold text-ink">Include an FAQ section</span>
-              <span className="block text-xs text-ink-3">Real questions, answered directly — good for AI Overviews</span>
+              <span className="block text-xs text-ink-3">Real questions, answered directly, good for AI Overviews</span>
             </span>
           </label>
 

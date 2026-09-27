@@ -12,8 +12,8 @@ export async function GET() {
     tools: {
       'generate-content': 'ready',
       'semantic-writer': { status: 'ready', stages: STEPS.length },
-      humanizer: 'not-built',
-      'rewrite-url': 'not-built',
+      humanizer: 'ready',
+      'rewrite-url': 'ready',
     },
   });
 }

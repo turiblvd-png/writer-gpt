@@ -1,7 +1,7 @@
 import { Shell, PageHeader } from '@/components/shell';
 import { GenerateWizard } from './wizard';
 
-export const metadata = { title: 'Generate Content — Writer-GPT' };
+export const metadata = { title: 'Generate Content · Writer-GPT' };
 
 export default function GeneratePage() {
   return (

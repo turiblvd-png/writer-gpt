@@ -102,7 +102,7 @@ export function ArticleTabs({
         <div className="card p-6">
           {article.sources.length === 0 ? (
             <p className="text-sm text-ink-2">
-              No sources recorded. This article was not grounded in live search — verify its facts before publishing.
+              No sources recorded. This article was not grounded in live search, verify its facts before publishing.
             </p>
           ) : (
             <ul className="space-y-2">

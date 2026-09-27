@@ -90,7 +90,7 @@ export function Chip({
     <button
       type="button"
       onClick={onClick}
-      title={title ?? (excluded ? 'Excluded — click to include' : 'Click to exclude from the mega prompt')}
+      title={title ?? (excluded ? 'Excluded, click to include' : 'Click to exclude from the mega prompt')}
       aria-pressed={!excluded}
       className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors ${
         excluded ? 'border-line bg-surface-2 text-ink-3 line-through opacity-60' : active

@@ -4,7 +4,7 @@ import { IconDoc } from '@/components/icons';
 import { listArticles } from '@/lib/db/store';
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'My Articles — Writer-GPT' };
+export const metadata = { title: 'My Articles · Writer-GPT' };
 
 export default function ArticlesPage() {
   const articles = listArticles();

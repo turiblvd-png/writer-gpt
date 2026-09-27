@@ -257,7 +257,7 @@ export function WordCountStage({ api }: { api: StageApi }) {
   const { wordCount } = project.data;
 
   return (
-    <Panel icon={<IconTarget />} title="Target word count" subtitle="Optional — auto follows the competitor average.">
+    <Panel icon={<IconTarget />} title="Target word count" subtitle="Optional, auto follows the competitor average.">
       <label className="mb-4 flex cursor-pointer items-center gap-3 rounded-xl border border-line bg-surface-2 p-3.5">
         <input
           type="checkbox"
@@ -282,14 +282,14 @@ export function WordCountStage({ api }: { api: StageApi }) {
           <span className="block text-sm font-semibold text-ink">Match the competitors automatically</span>
           <span className="block text-xs text-ink-3">
             {wordCount.competitorAverage
-              ? `Competitor average is ${wordCount.competitorAverage.toLocaleString()} words — target is set 15% above.`
+              ? `Competitor average is ${wordCount.competitorAverage.toLocaleString()} words, target is set 15% above.`
               : 'Extract competitor content first and the average will appear here.'}
           </span>
         </span>
       </label>
 
       <label className="label" htmlFor="target">
-        Target length — <span className="font-mono text-accent">{wordCount.target.toLocaleString()}</span> words
+        Target length, <span className="font-mono text-accent">{wordCount.target.toLocaleString()}</span> words
       </label>
       <input
         id="target"
@@ -320,8 +320,7 @@ export function CompetitorContentStage({ api }: { api: StageApi }) {
   return (
     <>
       <Notice tone="info">
-        This step is optional. Add competitor content if you want the AI to analyse and match its writing style —
-        and it is what N-Grams, NLP Keywords and Skip-Grams are measured from.
+        This step is optional. Add competitor content if you want the AI to analyse and match its writing style, and it is what N-Grams, NLP Keywords and Skip-Grams are measured from.
       </Notice>
 
       <Panel icon={<IconGlobe />} title="Extract Content from Competitors">

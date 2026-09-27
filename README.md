@@ -6,8 +6,8 @@ AI SEO content engine. Four tools on one research-grounded pipeline.
 | --- | --- |
 | **Generate Content** | Working — 6-step grounded pipeline |
 | **Semantic Writer** | Working — 14-stage workspace |
-| **Humanizer** | Not built |
-| **Rewrite from URL** | Not built |
+| **Humanizer** | Working, 3 stealth modes |
+| **Rewrite from URL** | Working, fact-preserving |
 
 The marketing site lives in [`marketing/`](./marketing) and is served separately.
 
@@ -23,7 +23,7 @@ Without a key the UI runs and the SEO tooling works; generation returns a clear
 503 rather than failing obscurely.
 
 ```bash
-npm test                # 80 tests, no network or API key needed
+npm test                # 142 tests, no network or API key needed
 npm run typecheck
 node scripts/seed.mjs            # sample article, to inspect the SEO panels
 node scripts/seed-semantic.mjs   # sample Semantic Writer project with a real corpus
@@ -138,6 +138,52 @@ Competitor URLs are fetched server-side from user input, so `semantic/extract.ts
 carries an SSRF guard: scheme allow-list, private/loopback/link-local block,
 per-hop redirect revalidation, and a response size cap.
 
+## The house style, shared by all four tools
+
+`src/lib/style` holds one standard every tool inherits, so they cannot drift:
+natural writing, AEO and LLM citability, Google NLP parseability, originality
+against sources, a reader-first override, and factual limits.
+
+It is **measured, not requested**. `detect.ts` scores a draft 0-100 from two
+signals: stock phrases, and the statistical evenness of sentence rhythm. The
+second matters more. A draft can contain no banned phrases and still read as
+generated because every sentence is the same length, so a coefficient of
+variation under 0.35 is penalised on its own.
+
+`repair.ts` closes the loop. If a draft scores below threshold, the specific
+findings go back to the model ("you used 'delve into' twice, every sentence is
+17 words"). A round that makes the score worse is discarded rather than
+silently accepted.
+
+`sanitize.ts` makes the em dash ban a guarantee rather than a request, choosing
+comma, full stop or bullet by context. An en dash between numbers is correct
+typography, so `October 15-18` is left alone.
+
+The rule is applied to this repo's own interface copy too, guarded by a test.
+
+## Humanizer
+
+Three stealth modes trading cost against depth: Mini fixes surface tells,
+High restructures paragraphs. The text is measured first so the rewrite prompt
+names the tells actually present, rather than asking generically for natural
+writing. Facts are held constant throughout, and output is stored separately
+from My Articles so a humanized copy never shadows the original.
+
+Language is detected from the text, so a Spanish draft is not rewritten into
+English because the picker defaulted to Automatic.
+
+## Rewrite from URL
+
+Facts are extracted into an explicit list first, and the writer works from that
+list rather than the source prose. Handing a model the source and asking it to
+"rewrite" reliably produces clause-level paraphrase, which reads as duplicate
+content and never outranks the original.
+
+Originality is then **measured**: `similarity.ts` computes containment over
+word 5-grams plus the longest verbatim run. Above 10% overlap or a 15-word
+shared run, the rewrite is redone once with that feedback. What survives is
+saved with the score visible, and a final pass checks no required fact was lost.
+
 ## Known limits
 
 - **Runs live in process memory.** Fine for one instance; horizontal scaling
@@ -154,5 +200,13 @@ per-hop redirect revalidation, and a response size cap.
 - **Competitor extraction cannot read JS-rendered pages.** It parses server HTML;
   a client-rendered article returns a clear error rather than empty text.
 - **Long generations run inside the request.** A 14-stage generate is four model
-  calls; it works, but a serverless host with a short timeout needs the run
-  moved onto the queue seam in `src/lib/runs/manager.ts`.
+  calls, and a Rewrite is five; it works, but a serverless host with a short
+  timeout needs the run moved onto the queue seam in `src/lib/runs/manager.ts`.
+- **The AI-tell catalogue is English-only.** Phrase detection and the passive
+  and transition heuristics do not transfer to the other languages in the picker,
+  so the human score is only meaningful for English.
+- **A high human score is not an AI-detector bypass**, and is not sold as one.
+  It measures the specific patterns in `style/patterns.ts`. Commercial detectors
+  use different signals.
+- **Humanizer holds facts constant by instruction and a fact-check pass**, not by
+  constraint. Verify figures in regulated or medical copy.

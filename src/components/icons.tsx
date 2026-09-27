@@ -1,4 +1,4 @@
-/** Inline icon set — avoids an icon dependency for the handful of glyphs used. */
+/** Inline icon set, avoids an icon dependency for the handful of glyphs used. */
 type P = { className?: string };
 const base = 'h-[18px] w-[18px]';
 const S = ({ children, className }: P & { children: React.ReactNode }) => (
@@ -33,3 +33,5 @@ export const IconEye = (p: P) => <S {...p}><path d="M2 12s3.5-7 10-7 10 7 10 7-3
 export const IconEdit = (p: P) => <S {...p}><path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16v4Z"/><path d="M14 6l4 4"/></S>;
 export const IconTerminal = (p: P) => <S {...p}><path d="m5 7 4 4-4 4M12 15h7"/><rect x="2" y="3" width="20" height="18" rx="2"/></S>;
 export const IconGraph = (p: P) => <S {...p}><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="17" cy="17" r="2.5"/><path d="M8 16.5 15.8 7.7M8.4 18.3l6.2-.9"/></S>;
+
+export const IconSearch = (p: P) => <S {...p}><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></S>;

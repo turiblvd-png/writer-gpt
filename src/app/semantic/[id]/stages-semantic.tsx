@@ -115,7 +115,7 @@ export function NgramsStage({ api }: { api: StageApi }) {
       <Panel
         icon={<IconList />}
         title="N-Gram frequency"
-        subtitle="Counted directly from extracted competitor text — no model involved."
+        subtitle="Counted directly from extracted competitor text, no model involved."
         action={
           <button className="btn-primary shrink-0 px-3 py-1.5 text-xs" disabled={Boolean(busy)} onClick={() => runAction('compute-ngrams')}>
             {busy === 'compute-ngrams' ? <Spinner className="h-3.5 w-3.5" /> : <><IconRefresh className="h-3.5 w-3.5" /> {ngrams.length ? 'Recompute' : 'Compute'}</>}
@@ -143,7 +143,7 @@ export function NgramsStage({ api }: { api: StageApi }) {
             </div>
 
             <Notice tone="info">
-              Sorted by how many competitor pages use the phrase, not raw count — a phrase every ranking page uses
+              Sorted by how many competitor pages use the phrase, not raw count, a phrase every ranking page uses
               matters more than one page&rsquo;s repetition. Click to exclude.
             </Notice>
 
@@ -175,7 +175,7 @@ export function NlpKeywordsStage({ api }: { api: StageApi }) {
     <Panel
       icon={<IconTag />}
       title="NLP keyword salience"
-      subtitle="TF-IDF against the competitor corpus — distinctiveness, not raw frequency."
+      subtitle="TF-IDF against the competitor corpus, distinctiveness, not raw frequency."
       action={
         <button className="btn-primary shrink-0 px-3 py-1.5 text-xs" disabled={Boolean(busy)} onClick={() => runAction('compute-keywords')}>
           {busy === 'compute-keywords' ? <Spinner className="h-3.5 w-3.5" /> : <><IconRefresh className="h-3.5 w-3.5" /> {nlpKeywords.length ? 'Recompute' : 'Compute'}</>}
@@ -238,7 +238,7 @@ export function SkipGramStage({ api }: { api: StageApi }) {
       ) : (
         <>
           <Notice tone="info">
-            Adjacent pairs are excluded — n-grams already cover those. What remains are relationships the writer should
+            Adjacent pairs are excluded, n-grams already cover those. What remains are relationships the writer should
             express in a sentence, not just list.
           </Notice>
           <div className="grid gap-1.5 sm:grid-cols-2">
@@ -272,7 +272,7 @@ export function AutoSuggestStage({ api }: { api: StageApi }) {
     <Panel
       icon={<IconSpark />}
       title="Questions & auto-suggest"
-      subtitle="Grounded in live search — what people actually ask right now."
+      subtitle="Grounded in live search, what people actually ask right now."
       action={
         <button className="btn-primary shrink-0 px-3 py-1.5 text-xs" disabled={Boolean(busy)} onClick={() => runAction('generate-questions')}>
           {busy === 'generate-questions' ? <Spinner className="h-3.5 w-3.5" /> : autoSuggest.length ? 'Regenerate' : 'Find questions'}

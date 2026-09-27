@@ -6,7 +6,7 @@ import { NewProjectForm } from './new-project';
 import { IconPlay } from '@/components/icons';
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'Semantic Writer — Writer-GPT' };
+export const metadata = { title: 'Semantic Writer · Writer-GPT' };
 
 const FEATURES = [
   'Competitor research and analysis',

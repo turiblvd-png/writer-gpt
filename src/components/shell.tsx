@@ -18,8 +18,8 @@ interface NavItem {
 const CREATE: NavItem[] = [
   { href: '/generate', label: 'Generate Content', icon: IconSpark },
   { href: '/semantic', label: 'Semantic Writer', icon: IconHub },
-  { href: '/humanizer', label: 'Humanizer', icon: IconWand, badge: 'Soon', disabled: true },
-  { href: '/rewrite', label: 'Rewrite from URL', icon: IconLink, badge: 'Soon', disabled: true },
+  { href: '/humanizer', label: 'Humanizer', icon: IconWand, badge: 'New' },
+  { href: '/rewrite', label: 'Rewrite from URL', icon: IconLink, badge: 'New' },
 ];
 
 const LIBRARY: NavItem[] = [
