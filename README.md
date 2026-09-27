@@ -13,14 +13,46 @@ The marketing site lives in [`marketing/`](./marketing) and is served separately
 
 ## Run it
 
+Needs Node 20.9 or newer (`better-sqlite3` is a native module).
+
 ```bash
+git clone -b claude/lucid-archimedes-f0i2w9 https://github.com/turiblvd-png/writer-gpt.git
+cd writer-gpt
 npm install
 cp .env.example .env.local     # add GEMINI_API_KEY
 npm run dev                    # http://localhost:3000
 ```
 
-Without a key the UI runs and the SEO tooling works; generation returns a clear
-503 rather than failing obscurely.
+Get a Gemini key from [aistudio.google.com/apikey](https://aistudio.google.com/apikey).
+
+Without a key the whole UI still runs, and so does everything that needs no
+model: SEO scoring, the AI-tell detector, n-grams, TF-IDF salience,
+skip-grams and similarity. Only the generate actions return a 503, with a
+message saying which variable to set.
+
+To see the tools populated rather than empty:
+
+```bash
+node scripts/seed.mjs            # sample article, for the SEO panels
+node scripts/seed-semantic.mjs   # Semantic Writer project with a real corpus
+```
+
+### Deploying
+
+The storage layer is SQLite on local disk, which rules out serverless hosts
+with an ephemeral filesystem. Vercel will build and serve, but the database
+resets on every cold start, so projects and articles vanish.
+
+Two options:
+
+- **A Node host with a persistent volume** (Railway, Render, Fly.io, a VPS).
+  Point `DATABASE_PATH` at the mounted volume and it works as-is. Also the
+  better fit for generation: a 14-stage run is four model calls and a Rewrite
+  is five, which exceeds the default function timeout on most serverless tiers.
+- **Swap SQLite for Postgres.** The seam is deliberately narrow: the query
+  functions in `src/lib/db/store.ts`, `src/lib/semantic/store.ts`,
+  `src/lib/humanizer/store.ts` and `src/lib/rewrite/store.ts`, all returning
+  plain objects. Nothing above them touches SQL.
 
 ```bash
 npm test                # 142 tests, no network or API key needed
