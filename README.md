@@ -13,7 +13,8 @@ The marketing site lives in [`marketing/`](./marketing) and is served separately
 
 ## Run it
 
-Needs Node 20.9 or newer (`better-sqlite3` is a native module).
+Needs Node 20.9 or newer. There are no native modules, so installs cannot
+fail on a platform mismatch.
 
 ```bash
 git clone -b claude/lucid-archimedes-f0i2w9 https://github.com/turiblvd-png/writer-gpt.git
@@ -39,16 +40,24 @@ node scripts/seed-semantic.mjs   # Semantic Writer project with a real corpus
 
 ### Deploying
 
-Vercel works, with one caveat. Its lambda filesystem is read-only apart from
-`/tmp`, so the app detects a serverless host and stores the database there
-automatically. Every page and tool runs, but `/tmp` is wiped on each cold
-start, so saved articles and projects do not survive. The UI says so with a
-banner rather than letting the data quietly disappear.
+Vercel works. Its lambda filesystem is read-only apart from `/tmp`, so the app
+detects a serverless host and stores data there automatically. Every page and
+tool runs, but `/tmp` is wiped on each cold start, so saved articles and
+projects do not survive. The UI says so with a banner rather than letting the
+data quietly disappear.
 
-If storage cannot be opened at all, the app falls back to an in-memory database
-and still renders, instead of returning a server-side exception on every route.
+Storage is a plain JSON file, not SQLite. That was a deliberate swap: the app
+does CRUD by id plus list-ordered-by-date, with no joins or aggregates, over at
+most a few hundred records, so a SQL engine bought nothing. It cost something,
+though, because `better-sqlite3` is a native module whose binary has to be
+traced into the deployment bundle. When that failed it threw at import time,
+before any guard could run, and every route returned an unrecoverable 500.
 
-For durable storage, two options:
+If the data file cannot be written, the store falls back to memory and the app
+still renders. A corrupt file is set aside under a `.corrupt-<timestamp>` name
+rather than silently overwritten.
+
+For durable storage, two options:For durable storage, two options:
 
 - **A Node host with a persistent volume** (Railway, Render, Fly.io, a VPS).
   Point `DATABASE_PATH` at the mounted volume and it works as-is. An explicit
@@ -56,10 +65,10 @@ For durable storage, two options:
   on Vercel with a mounted network volume. Also the
   better fit for generation: a 14-stage run is four model calls and a Rewrite
   is five, which exceeds the default function timeout on most serverless tiers.
-- **Swap SQLite for Postgres.** The seam is deliberately narrow: the query
-  functions in `src/lib/db/store.ts`, `src/lib/semantic/store.ts`,
-  `src/lib/humanizer/store.ts` and `src/lib/rewrite/store.ts`, all returning
-  plain objects. Nothing above them touches SQL.
+- **Move to Postgres.** The seam is deliberately narrow: `src/lib/db/engine.ts`
+  exposes one `collection()` helper with get/list/put/mutate/remove, and the
+  four store modules are thin wrappers over it. Nothing above them knows how
+  data is stored.
 
 ```bash
 npm test                # 142 tests, no network or API key needed
@@ -105,7 +114,7 @@ src/lib/
   semantic/    the 14-stage Semantic Writer workspace
   content/     prompts, types, markdown rendering, JSON recovery
   seo/         deterministic scoring — no model call, no cost
-  db/          SQLite behind a narrow repository
+  db/          pure-JS JSON document store behind a narrow repository
   runs/        in-process run registry + SSE fan-out
 src/app/       Next.js App Router pages and API routes
 ```
@@ -238,6 +247,9 @@ saved with the score visible, and a final pass checks no required fact was lost.
   non-English projects.
 - **Competitor extraction cannot read JS-rendered pages.** It parses server HTML;
   a client-rendered article returns a clear error rather than empty text.
+- **A JSON store suits this app's data volume, not any volume.** It rewrites the
+  whole file on each save, which is fine for hundreds of records and wrong for
+  tens of thousands. Move to Postgres before that point.
 - **Long generations run inside the request.** A 14-stage generate is four model
   calls, and a Rewrite is five; it works, but a serverless host with a short
   timeout needs the run moved onto the queue seam in `src/lib/runs/manager.ts`.

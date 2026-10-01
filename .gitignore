@@ -6,6 +6,6 @@ build/
 .DS_Store
 .env
 .env.local
-data/*.db
-data/*.db-*
+data/
 tsconfig.tsbuildinfo
+.test-storage/

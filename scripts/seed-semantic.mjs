@@ -1,10 +1,11 @@
 /**
  * Seeds a Semantic Writer project with pre-extracted competitor content, so the
- * deterministic stages (n-grams, salience, skip-grams) can be exercised without
- * network access or an API key.
+ * deterministic stages (n-grams, salience, skip-grams) can be exercised with no
+ * network access and no API key. Writes the JSON store directly.
+ * Usage: node scripts/seed-semantic.mjs
  */
-import Database from 'better-sqlite3';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 
 const pages = [
@@ -41,16 +42,7 @@ Jannik Sinner won the 2024 and 2025 editions, defeating Carlos Alcaraz in both f
 ` },
 ];
 
-const count = (t) => (t.match(/[\p{L}\p{N}][\p{L}\p{N}'’-]*/gu) ?? []).length;
-
-mkdirSync('./data', { recursive: true });
-const db = new Database(process.env.DATABASE_PATH ?? './data/writer-gpt.db');
-db.pragma('journal_mode = WAL');
-db.exec(`CREATE TABLE IF NOT EXISTS semantic_projects (
-  id TEXT PRIMARY KEY, name TEXT NOT NULL, language TEXT NOT NULL DEFAULT 'English',
-  main_keyword TEXT NOT NULL, current_step INTEGER NOT NULL DEFAULT 0,
-  completed TEXT NOT NULL DEFAULT '[]', data TEXT NOT NULL DEFAULT '{}',
-  created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);`);
+const count = (t) => (t.match(/[\p{L}\p{N}][\p{L}\p{N}'\u2019-]*/gu) ?? []).length;
 
 const data = {
   competitors: pages.map((p) => ({ url: p.url, domain: p.domain })),
@@ -103,10 +95,26 @@ const data = {
   aiInstructions: '',
 };
 
+const file = (process.env.DATABASE_PATH ?? './data/writer-gpt.json').replace(/\.(db|sqlite3?)$/i, '.json');
+mkdirSync(dirname(file), { recursive: true });
+
+let db = {};
+try { db = JSON.parse(readFileSync(file, 'utf8')); } catch { /* first run */ }
+
 const id = randomUUID();
 const now = Date.now();
-db.prepare(`INSERT INTO semantic_projects (id,name,language,main_keyword,current_step,completed,data,created_at,updated_at)
-            VALUES (?,?,?,?,?,?,?,?,?)`)
-  .run(id, 'Six Kings Slam 2026', 'English', 'six kings slam', 0, '[]', JSON.stringify(data), now, now);
+db.semantic_projects = db.semantic_projects ?? [];
+db.semantic_projects.push({
+  id,
+  name: 'Six Kings Slam 2026',
+  language: 'English',
+  mainKeyword: 'six kings slam',
+  currentStepIndex: 0,
+  completedSteps: [],
+  data,
+  createdAt: now,
+  updatedAt: now,
+});
 
+writeFileSync(file, JSON.stringify(db), 'utf8');
 console.log(id);

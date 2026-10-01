@@ -1,10 +1,10 @@
 /**
- * Seeds the library with the Six Kings Slam article from the existing tool, so
- * the SEO panels can be inspected against real generated content.
+ * Seeds the library with a sample article so the SEO panels can be inspected
+ * against real content. Writes the JSON store directly; no database driver.
  * Usage: node scripts/seed.mjs
  */
-import Database from 'better-sqlite3';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 
 const markdown = `# Six Kings Slam: 6 Facts About the Elite Tennis Showdown
 
@@ -44,38 +44,33 @@ The tournament took place in Riyadh, Saudi Arabia, during the annual Riyadh Seas
 
 The Six Kings Slam established a new model for international tennis exhibitions through top-ranked players, high production values, and global live streaming.`;
 
-mkdirSync('./data', { recursive: true });
-const db = new Database(process.env.DATABASE_PATH ?? './data/writer-gpt.db');
-db.pragma('journal_mode = WAL');
-db.exec(`
-  CREATE TABLE IF NOT EXISTS articles (
-    id TEXT PRIMARY KEY, title TEXT NOT NULL, slug TEXT NOT NULL, markdown TEXT NOT NULL,
-    meta_description TEXT NOT NULL DEFAULT '', focus_keyword TEXT NOT NULL DEFAULT '',
-    keywords TEXT NOT NULL DEFAULT '[]', language TEXT NOT NULL DEFAULT 'English',
-    seo_mode TEXT NOT NULL DEFAULT 'full-seo', word_count INTEGER NOT NULL DEFAULT 0,
-    status TEXT NOT NULL DEFAULT 'draft', sources TEXT NOT NULL DEFAULT '[]',
-    created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
-  CREATE TABLE IF NOT EXISTS runs (
-    id TEXT PRIMARY KEY, pipeline_id TEXT NOT NULL, article_id TEXT, status TEXT NOT NULL,
-    progress REAL NOT NULL DEFAULT 0, snapshot TEXT NOT NULL DEFAULT '{}', error TEXT,
-    created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
-`);
+const count = (t) => (t.match(/[\p{L}\p{N}][\p{L}\p{N}'\u2019-]*/gu) ?? []).length;
+const file = (process.env.DATABASE_PATH ?? './data/writer-gpt.json').replace(/\.(db|sqlite3?)$/i, '.json');
+
+mkdirSync(dirname(file), { recursive: true });
+
+let db = {};
+try { db = JSON.parse(readFileSync(file, 'utf8')); } catch { /* first run */ }
 
 const now = Date.parse('2026-09-27T12:23:43Z');
-db.prepare(
-  `INSERT OR REPLACE INTO articles (id,title,slug,markdown,meta_description,focus_keyword,keywords,
-     language,seo_mode,word_count,status,sources,created_at,updated_at)
-   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-).run(
-  'seed-six-kings-slam',
-  'Six Kings Slam: 6 Facts About the Elite Tennis Showdown',
-  'six-kings-slam-6-facts-about-the-elite-tennis-showdown',
+db.articles = (db.articles ?? []).filter((a) => a.id !== 'seed-six-kings-slam');
+db.articles.push({
+  id: 'seed-six-kings-slam',
+  title: 'Six Kings Slam: 6 Facts About the Elite Tennis Showdown',
+  slug: 'six-kings-slam-6-facts-about-the-elite-tennis-showdown',
   markdown,
-  'The Six Kings Slam stands among the most lucrative exhibition tennis events in world sports, awarding millions to top competitors across a concise schedule.',
-  'six kings slam',
-  JSON.stringify(['six kings slam', 'riyadh season', 'jannik sinner', 'carlos alcaraz', 'exhibition tennis']),
-  'English', 'hybrid', (markdown.match(/[\p{L}\p{N}][\p{L}\p{N}'’-]*/gu) ?? []).length,
-  'draft', JSON.stringify([]), now, now,
-);
+  metaDescription:
+    'The Six Kings Slam stands among the most lucrative exhibition tennis events in world sports, awarding millions to top competitors across a concise schedule.',
+  focusKeyword: 'six kings slam',
+  keywords: ['six kings slam', 'riyadh season', 'jannik sinner', 'carlos alcaraz', 'exhibition tennis'],
+  language: 'English',
+  seoMode: 'hybrid',
+  wordCount: count(markdown),
+  status: 'draft',
+  sources: [],
+  createdAt: now,
+  updatedAt: now,
+});
 
-console.log('Seeded 1 article.');
+writeFileSync(file, JSON.stringify(db), 'utf8');
+console.log(`Seeded 1 article into ${file}`);
