@@ -1,6 +1,7 @@
 import type { RunClock } from '@/lib/pipeline/types';
 import { systemPreamble } from '@/lib/style/rules';
 import type { CompetitorOutline, SemanticProject } from './types';
+import { maxSectionsFor } from './brief';
 
 const rules = (clock: RunClock, language: string) => systemPreamble(clock, language);
 
@@ -9,6 +10,7 @@ export function combineOutlinesPrompt(
   outlines: CompetitorOutline[],
   clock: RunClock,
 ): string {
+  const sizes = maxSectionsFor(project.data.wordCount.target);
   const rendered = outlines
     .filter((o) => o.headings.length)
     .map((o) => [`--- ${o.domain} ---`, ...o.headings.map((h) => `H${h.level}: ${h.text}`)].join('\n'))
@@ -26,11 +28,16 @@ export function combineOutlinesPrompt(
     '',
     'Rules:',
     '- Drop site chrome that is not article content (navigation, "Related posts", newsletter prompts, cookie notices).',
-    '- Merge headings that say the same thing in different words into a single, clearer heading.',
+    '- Merge headings that say the same thing in different words. Never keep two sections on the same subject (one accessibility section, one streaming section).',
     `- Order sections by what a reader searching "${project.mainKeyword}" needs first, not by what competitors happen to do.`,
-    '- Use H3s to nest detail under H2s. A flat list of H2s is a failure.',
+    '- Every H2 and H3 is a question a searcher asks or a concrete claim ("When Is X 2026?", "Ticket prices by category"). Never a vague label like "Overview", "Details" or "Tickets and entry".',
+    '- Use H3s to nest detail under H2s. A flat list of H2s is a failure, but so is an H2 with one H3.',
+    `- Size it for about ${project.data.wordCount.target} words: at most ${sizes.h2} H2s and ${sizes.h3} H3s in total. Merge or cut the least useful sections to stay within that.`,
     '- Add headings for subtopics the competitors miss but a reader would want. Mark those with "gap": true.',
-    '- One H1 only, first.',
+    '- One H1 only, first. Use the main keyword once in it; do not repeat it.',
+    '- Do not include a "Key takeaways" or "Introduction" heading; the article opens with those without a heading.',
+    '- Include an H2 for frequently asked questions near the end, with each question as its own H3.',
+    '- End with an H2 "Sources".',
     `- If the topic is time-bound, the structure must serve ${clock.year}, not a past edition.`,
     '',
     'Return JSON only:',
@@ -101,27 +108,11 @@ export function questionsPrompt(project: SemanticProject, clock: RunClock): stri
   ].join('\n');
 }
 
-export function researchPrompt(project: SemanticProject, clock: RunClock): string {
-  return [
-    rules(clock, project.language),
-    '',
-    `Research "${project.mainKeyword}" against live search, as of ${clock.today}.`,
-    '',
-    'Write a factual brief the writer will treat as its only source of specifics:',
-    '1. STATUS NOW: Is this time-bound? If so, what is the current state and the next upcoming instance, with dates? If evergreen, say so.',
-    '2. KEY FACTS: Specific checkable facts with their source. Mark anything you could not verify as UNVERIFIED.',
-    '3. RECENT CHANGES: What changed in the last 12 months that an older article would get wrong.',
-    '4. CONFLICTS: Where sources disagree, give both and say which is better sourced.',
-    '',
-    'Dates, numbers and names beat description. Do not write marketing prose.',
-  ].join('\n');
-}
-
 export function verifyPrompt(markdown: string, research: string, clock: RunClock): string {
   return [
     `It is ${clock.today}. Fact-check this draft against live search.`,
     '',
-    research ? `Research brief it was written from:\n${research}\n` : '',
+    research ? `Fact sheet it was written from:\n${research}\n` : '',
     'Draft:',
     markdown.slice(0, 14000),
     '',
@@ -149,8 +140,9 @@ export function metaPrompt(project: SemanticProject, markdown: string, clock: Ru
     `- If the topic is time-bound, include ${clock.year}, year modifiers carry high intent.`,
     '- metaDescription: 140–155 characters, contains the focus keyword, gives a reason to click.',
     '- slug: lowercase, hyphenated, under 60 characters, contains the focus keyword.',
+    '- altTexts: 3 to 5 alt texts for images this article should carry (venue, people, tables as images, maps). Each under 125 characters, literal and descriptive, keyword only where it is true.',
     '',
     'Return JSON only:',
-    '{ "seoTitle": "", "metaDescription": "", "slug": "" }',
+    '{ "seoTitle": "", "metaDescription": "", "slug": "", "altTexts": [""] }',
   ].join('\n');
 }

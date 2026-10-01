@@ -7,6 +7,9 @@ import { IconAlert, IconBook, IconCheck, IconCopy, IconEdit, IconEye, IconSpark,
 import { analyseSeo } from '@/lib/seo/analysis';
 import { renderMarkdown } from '@/lib/content/render';
 import { reviewSummary, reviewWarnings } from '@/lib/semantic/megaprompt';
+import { lengthBudget } from '@/lib/semantic/brief';
+import { assessArticle, plannedOutline } from '@/lib/semantic/quality';
+import { FactsPanel } from './stages-facts';
 import { STEPS } from '@/lib/semantic/steps';
 
 export function GrammarStage({ api }: { api: StageApi }) {
@@ -162,6 +165,7 @@ export function MasterPromptStage({ api, onNavigate }: { api: StageApi; onNaviga
 
   const summary = useMemo(() => reviewSummary(project), [project]);
   const { blocking, advisory } = useMemo(() => reviewWarnings(project), [project]);
+  const budget = useMemo(() => lengthBudget(plannedOutline(project), project.data.wordCount.target), [project]);
   const generating = busy === 'generate-article';
 
   const rows: [string, string | number][] = [
@@ -175,7 +179,8 @@ export function MasterPromptStage({ api, onNavigate }: { api: StageApi; onNaviga
     ['NLP keywords', summary.keywords],
     ['Skip-grams', summary.skipGrams],
     ['Questions', summary.questions],
-    ['Target length', `${summary.targetWords.toLocaleString()} words`],
+    ['Target length', `${budget.effective.toLocaleString()} words`],
+    ['Verified facts', project.data.facts?.facts.length ?? 0],
   ];
 
   return (
@@ -190,6 +195,16 @@ export function MasterPromptStage({ api, onNavigate }: { api: StageApi; onNaviga
           ))}
         </dl>
       </Panel>
+
+      {budget.raised && (
+        <Notice tone="warn">
+          Your outline has {budget.h2} H2 and {budget.h3} H3 sections, which needs about {budget.minimum.toLocaleString()} words to say
+          something useful under each. The brief asks for {budget.effective.toLocaleString()} words instead of {budget.requested.toLocaleString()}.
+          To keep it shorter, remove headings in Outline Creation.
+        </Notice>
+      )}
+
+      <FactsPanel api={api} />
 
       <Panel
         icon={<IconTerminal />}
@@ -285,6 +300,11 @@ export function ContentEditorStage({ api }: { api: StageApi }) {
     return { wanted, covered, missing: wanted.filter((e) => !covered.includes(e)) };
   }, [article, project.data.entities, project.data.excludedEntities]);
 
+  const quality = useMemo(
+    () => (article ? assessArticle(project, article.markdown, article.quality?.revised ?? false) : null),
+    [article, project],
+  );
+
   if (!article) {
     return <Notice tone="warn">No article generated yet. Go back to Review and generate one.</Notice>;
   }
@@ -316,6 +336,29 @@ export function ContentEditorStage({ api }: { api: StageApi }) {
             />
           )}
         </div>
+      )}
+
+      {quality && (
+        <Panel
+          icon={<IconCheck />}
+          title={`Brief check: ${quality.passed} of ${quality.total} passed`}
+          subtitle={quality.revised ? 'A revision pass already ran after the first draft. This re-checks live as you edit.' : 'Re-checks live as you edit.'}
+        >
+          <ul className="space-y-1.5">
+            {quality.checks.map((c) => (
+              <li key={c.id} className="flex gap-2.5 text-sm">
+                {c.ok ? <IconCheck className="mt-0.5 h-4 w-4 shrink-0 text-ok" /> : <IconAlert className="mt-0.5 h-4 w-4 shrink-0 text-warn" />}
+                <span><span className="font-semibold">{c.label}.</span> <span className="text-ink-2">{c.detail}</span></span>
+              </li>
+            ))}
+          </ul>
+          {article.altTexts && article.altTexts.length > 0 && (
+            <div className="mt-4 border-t border-line pt-3">
+              <p className="mb-1 text-xs font-bold uppercase tracking-wider text-ink-3">Image alt text suggestions</p>
+              <ul className="space-y-0.5 text-sm text-ink-2">{article.altTexts.map((t) => <li key={t}>• {t}</li>)}</ul>
+            </div>
+          )}
+        </Panel>
       )}
 
       {coverage && coverage.missing.length > 0 && (

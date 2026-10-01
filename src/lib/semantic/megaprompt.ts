@@ -1,6 +1,8 @@
 import type { RunClock } from '@/lib/pipeline/types';
 import { houseStyle } from '@/lib/style/rules';
 import type { SemanticProject } from './types';
+import { keywordTargets, lengthBudget, splitKeywords, usefulPairs, usefulPhrases, usefulTerms, withFaqQuestions } from './brief';
+import { factSheetBlock } from './fact-block';
 
 /**
  * Compiles all 14 stages into the single brief the writer receives.
@@ -25,42 +27,95 @@ export function buildMegaPrompt(
   clock: RunClock,
   opts: MegaPromptOptions = {},
 ): string {
-  const { data, mainKeyword, language } = project;
+  const { data, language } = project;
   const maxEntities = opts.maxEntities ?? 45;
-  const maxNgrams = opts.maxNgrams ?? 35;
-  const maxKeywords = opts.maxKeywords ?? 40;
-  const maxSkipGrams = opts.maxSkipGrams ?? 20;
+  const maxNgrams = opts.maxNgrams ?? 25;
+  const maxKeywords = opts.maxKeywords ?? 30;
+  const maxSkipGrams = opts.maxSkipGrams ?? 15;
+  const year = Number(clock.year);
 
   const excludedEntities = new Set(data.excludedEntities.map(lower));
   const excludedNgrams = new Set(data.excludedNgrams.map(lower));
   const excludedKeywords = new Set(data.excludedKeywords.map(lower));
 
-  const entities = data.entities.filter((e) => !excludedEntities.has(lower(e.name))).slice(0, maxEntities);
-  const ngrams = data.ngrams.filter((g) => !excludedNgrams.has(lower(g.text))).slice(0, maxNgrams);
-  const keywords = data.nlpKeywords.filter((k) => !excludedKeywords.has(lower(k.term))).slice(0, maxKeywords);
-  const skipGrams = data.skipGrams.slice(0, maxSkipGrams);
-  const questions = data.selectedQuestions.length ? data.selectedQuestions : data.autoSuggest.slice(0, 8);
+  const keywords = splitKeywords(project.mainKeyword);
+  const primary = keywords[0] ?? project.mainKeyword;
+  const keywordSet = new Set(keywords.map(lower));
+
+  const entities = data.entities
+    .filter((e) => !excludedEntities.has(lower(e.name)) && !keywordSet.has(lower(e.name)))
+    .slice(0, maxEntities);
+  const ngrams = usefulPhrases(data.ngrams.filter((g) => !excludedNgrams.has(lower(g.text))), year, maxNgrams);
+  const terms = usefulTerms(data.nlpKeywords.filter((k) => !excludedKeywords.has(lower(k.term))), year, maxKeywords);
+  const pairs = usefulPairs(data.skipGrams, year, maxSkipGrams);
+  const questions = (data.selectedQuestions.length ? data.selectedQuestions : data.autoSuggest).slice(0, 8);
+  const outline = data.seoRules.includeFaq ? withFaqQuestions(data.combinedOutline, questions) : data.combinedOutline;
+  const budget = lengthBudget(outline, data.wordCount.target);
+  const targets = keywordTargets(keywords, budget.effective);
+  const facts = data.facts;
+  const hasUnconfirmed = Boolean(facts?.facts.some((f) => f.status === 'unconfirmed' || f.status === 'conflicting'));
 
   const sections: string[] = [];
 
   sections.push(
+    section('PRIORITY WHEN RULES CONFLICT', [
+      '1. Factual accuracy  2. Usefulness to the reader  3. Style rules  4. SEO targets',
+      'A lower priority never justifies breaking a higher one.',
+    ]),
+  );
+
+  sections.push(
     section('BRIEF', [
-      `Main keyword: ${mainKeyword}`,
+      `Topic: ${primary}`,
       `Language: ${language}`,
-      `Target length: ${data.wordCount.target} words${data.wordCount.competitorAverage ? ` (competitor average: ${data.wordCount.competitorAverage})` : ''}`,
+      `Target length: ${budget.effective.toLocaleString()} words${data.wordCount.competitorAverage ? ` (competitor average: ${data.wordCount.competitorAverage.toLocaleString()})` : ''}.` +
+        (budget.raised ? ` Raised from ${budget.requested.toLocaleString()} because the outline has ${budget.h2} H2 and ${budget.h3} H3 sections.` : ''),
+      `Section budget: about ${budget.perH2Intro} words directly under each H2, about ${budget.perH3} words under each H3. Depth comes from specifics, not length.`,
       `Today's date: ${clock.today}. The current year is ${clock.year}.`,
     ]),
   );
 
-  if (data.combinedOutline.length) {
+  if (facts && facts.facts.length) {
+    sections.push(section('VERIFIED FACTS', factSheetBlock(facts, clock)));
+  } else {
     sections.push(
-      section('REQUIRED STRUCTURE', [
-        'Follow this heading structure exactly, in order. Do not add, drop or reorder headings.',
-        '',
-        ...data.combinedOutline.map((h) => `${'#'.repeat(Math.max(1, Math.min(6, h.level)))} ${h.text}`),
+      section('VERIFIED FACTS', [
+        'No fact sheet was compiled. A live research brief is attached after this prompt; take every specific from it and nowhere else.',
       ]),
     );
   }
+
+  sections.push(
+    section('ARTICLE OPENING', [
+      `1. One H1, first. Use the main keyword once in it.`,
+      `2. Directly under the H1: "Last updated: ${clock.today}".`,
+      `3. Within the first 50 words, a one-sentence definition: "${primary} is ...". AI answers and featured snippets lift this line.`,
+      '4. A "Key takeaways" block of 5 short bullets (not a heading) that answers the main query: the most important confirmed facts.',
+      ...(hasUnconfirmed ? ['5. A short "Confirmed vs not yet announced" list, so readers know what to trust.'] : []),
+    ]),
+  );
+
+  if (outline.length) {
+    sections.push(
+      section('REQUIRED STRUCTURE', [
+        'Follow this heading structure exactly, in order. Do not add, drop, reword or reorder headings. These headings are fixed, so ignore any general rule about heading wording.',
+        ...(data.seoRules.includeFaq && questions.length ? ['Each FAQ heading is a question: answer it in the first one or two sentences under it, then stop.'] : []),
+        'The Sources section, if present, lists only the sources named under VERIFIED FACTS.',
+        '',
+        ...outline.map((h) => `${'#'.repeat(Math.max(1, Math.min(6, h.level)))} ${h.text}`),
+      ]),
+    );
+  }
+
+  sections.push(
+    section('KEYWORDS', [
+      ...targets.map((t) => `- "${t.term}": ${t.min} to ${t.max} times, exact phrase${t.primary ? ' (primary)' : ''}. Close variants also count toward relevance.`),
+      'Uses of a longer keyword that contains a shorter one count toward both.',
+      `Required placements for "${primary}": the H1, the first 100 words, at least one H2, the FAQ section and the final section.`,
+      ...(targets.length > 1 ? [`Use "${targets[1]!.term}" in the section about it and in at least one FAQ answer.`] : []),
+      'Going over the range reads as stuffing. Never bend a sentence to fit a keyword.',
+    ]),
+  );
 
   if (entities.length) {
     // Coverage targets come from competitor document frequency: an entity every
@@ -70,14 +125,15 @@ export function buildMegaPrompt(
 
     sections.push(
       section('ENTITY COVERAGE', [
-        'Name these entities explicitly and correctly. Entities are how search engines classify a page, referring to something vaguely does not count as covering it.',
+        'Name entities explicitly, with their canonical name. A vague reference does not count as covering it.',
+        'State how each entity relates to the topic as a plain subject-verb-object fact, using only the fact sheet.',
         '',
         ...(required.length
-          ? ['REQUIRED (named by two or more ranking competitors, the article is incomplete without them):',
-             ...required.map((e) => `- ${e.name}${e.documentFrequency ? ` [in ${e.documentFrequency} competitor pages]` : ''}`), '']
+          ? ['REQUIRED (named by two or more ranking pages):',
+             ...required.map((e) => `- ${e.name}${e.documentFrequency ? ` [${e.documentFrequency} pages]` : ''}`), '']
           : []),
         ...(optional.length
-          ? ['WORTH INCLUDING (differentiators, these are where you beat the competitors):',
+          ? ['OPTIONAL (differentiators). Include one only if the fact sheet connects it to the topic, and state that connection in the sentence. If there is no connection, skip it; an unrelated entity makes the page look like it is about something else.',
              ...optional.map((e) => `- ${e.name}`)]
           : []),
       ]),
@@ -87,29 +143,29 @@ export function buildMegaPrompt(
   if (ngrams.length) {
     sections.push(
       section('PHRASES USED BY RANKING PAGES', [
-        'These phrases were counted across the competitor corpus. Work them in where they fit naturally. Never force one into a sentence that reads worse for it.',
+        'Counted across the competitor pages. Use them where they fit naturally; never force one into a sentence that reads worse for it.',
         '',
         ...ngrams.map((g) => `- "${g.text}" (${g.count}× across ${g.documents} pages)`),
       ]),
     );
   }
 
-  if (keywords.length) {
+  if (terms.length) {
     sections.push(
       section('HIGH-SALIENCE TERMS', [
-        'Ranked by TF-IDF against the competitor corpus, these define the topic rather than merely appearing in it.',
+        'These define the topic in the ranking pages (TF-IDF). Some may come from unrelated parts of those pages: ignore any that do not apply to this topic.',
         '',
-        keywords.map((k) => k.term).join(', '),
+        terms.map((k) => k.term).join(', '),
       ]),
     );
   }
 
-  if (skipGrams.length) {
+  if (pairs.length) {
     sections.push(
       section('CONCEPT RELATIONSHIPS', [
-        'These pairs co-occur repeatedly in ranking content. Write sentences that genuinely relate them, rather than listing both.',
+        'These pairs co-occur in ranking content. Where the fact sheet supports it, write a sentence that states how they relate. Ignore any pair that does not apply.',
         '',
-        ...skipGrams.map((s) => `- ${s.text.replace(' … ', ' ↔ ')} (${s.count}×)`),
+        ...pairs.map((p) => `- ${p.text.replace(' … ', ' ↔ ')} (${p.count}×)`),
       ]),
     );
   }
@@ -117,7 +173,7 @@ export function buildMegaPrompt(
   if (questions.length) {
     sections.push(
       section('QUESTIONS TO ANSWER', [
-        'Answer each directly, in its own section, in the first two sentences under the heading. A direct answer is what wins featured snippets and AI Overview citations.',
+        'Answer each directly in the first one or two sentences of its section, before any context.',
         '',
         ...questions.map((q) => `- ${q}`),
       ]),
@@ -148,15 +204,14 @@ export function buildMegaPrompt(
 
   const s = data.seoRules;
   sections.push(
-    section('SEO TARGETS', [
-      `Keyword density: about ${s.targetKeywordDensity}% for "${mainKeyword}". Going over reads as stuffing and is penalised.`,
-      `At least ${s.minTransitionRatio}% of sentences should use a transition, though most should still open with the subject.`,
-      `No more than ${s.maxPassiveRatio}% of sentences in passive voice.`,
-      s.includeKeyTakeaways ? '- Open with a short key-takeaways block that answers the query immediately.' : '',
-      s.includeTables ? '- Use a markdown table wherever comparison genuinely helps. Do not add one for decoration.' : '',
-      s.includeFaq ? '- Include an FAQ section built from the questions above.' : '',
+    section('FORMAT AND SEO', [
+      '- Paragraphs: one to three sentences, at most 50 words. Single-sentence paragraphs are fine.',
+      `- No more than one sentence in five opens with a transition word. No more than ${s.maxPassiveRatio}% of sentences in passive voice.`,
+      s.includeTables ? '- Use a markdown table wherever comparison genuinely helps (dates and times, prices, people, where to watch or buy). Do not add one for decoration.' : '',
+      '- Where it applies, give local details: times with the time zone and a UTC or GMT conversion, prices in local currency with an approximate USD figure, entry or visa notes for visitors.',
+      s.includeFaq ? '- The FAQ section answers the questions above, one question per heading.' : '',
       s.internalLinks ? `- Link naturally to these internal pages: ${s.internalLinks}` : '',
-      s.externalLinksPolicy === 'cite-sources' ? '- Cite external sources for statistics and quoted claims.' : '',
+      s.externalLinksPolicy === 'cite-sources' ? '- Name the source in the sentence for every statistic, price and quoted claim.' : '',
     ].filter(Boolean)),
   );
 
@@ -169,8 +224,20 @@ export function buildMegaPrompt(
   }
 
   sections.push(
+    section('BEFORE YOU RETURN, CHECK SILENTLY AND FIX', [
+      '- Zero em dashes, and en dashes only between numbers.',
+      '- No paragraph over three sentences or 50 words.',
+      '- No banned word or pattern from the lists above.',
+      '- Every specific traces to the VERIFIED FACTS; nothing is invented.',
+      '- Every heading from the structure is present, in order.',
+      '- Each FAQ answer stands alone in its first two sentences.',
+      `- Length within 10% of ${budget.effective.toLocaleString()} words; keyword counts within their ranges.`,
+    ]),
+  );
+
+  sections.push(
     section('OUTPUT', [
-      'Return the complete article as markdown. Start with a single H1.',
+      'Return the complete article as markdown. Start with the single H1.',
       'No preamble, no commentary, no code fences around the article.',
     ]),
   );

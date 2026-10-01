@@ -41,7 +41,10 @@ Rhythm, which matters more than vocabulary:
 Tone:
 - Do not hedge reflexively. "This usually takes two days" beats "this may potentially take approximately two days".
 - Do not announce what you are about to do. Do it.
-- Do not restate the heading in the first sentence under it.
+- Answer directly under each heading, but do not copy the heading's wording into the first sentence.
+- No rhetorical questions as openers. No "It's not just X, it's Y". No "Here's the thing". No exclamation marks.
+- Do not end every section with a summary sentence. Stop when the point is made.
+- Do not open with "From X to Y". Do not use a mid-sentence colon for drama ("The answer: simple.").
 - Cut any sentence that would not be missed. Padding to reach a word count is self-defeating.
 - No cheerleading. Do not call anything revolutionary, powerful or essential. Show the reader and let them judge.`;
 
@@ -74,7 +77,8 @@ export const NLP_RULES = `PARSEABLE BY GOOGLE'S NATURAL LANGUAGE API
 - Expand an abbreviation on first use, then use it consistently.
 - Write in active voice. Passive is acceptable only when the actor is genuinely unknown or irrelevant.
 - One idea per sentence. Split anything carrying two independent clauses joined by "and".
-- Keep paragraphs to one point, three to five sentences.`;
+- Keep each paragraph to one point: one to three sentences, at most 50 words. A single-sentence paragraph is fine.
+- State relationships between entities as plain subject-verb-object facts, e.g. "The Model Y is made by Tesla, so it charges at Tesla Superchargers." These are the sentences knowledge graphs and AI answers extract.`;
 
 /** User-first, in the Helpful Content sense: written by someone who knows the thing. */
 export const USER_FIRST_RULES = `WRITE FOR THE READER FIRST
@@ -84,7 +88,7 @@ This rule outranks every SEO instruction above. If hitting a keyword target make
 - Open by answering what the reader came for. No preamble, no scene-setting.
 - Be specific enough to act on. Give the number, the step, the exact name.
 - Say the useful thing even when it is inconvenient: the limitation, the cheaper alternative, the case where this does not apply.
-- Write as somebody who has actually done this, not as somebody summarising what others wrote about it.
+- Write with the practical knowledge of someone who has done this: the order of steps, the catch, the cheaper option. Do not claim first-person experience ("when I went", "we tested") you cannot have.
 - If you do not know something, say so plainly. A stated gap is worth more than a confident guess.`;
 
 /** Originality: the point of a rewrite is to be better, not to be different. */

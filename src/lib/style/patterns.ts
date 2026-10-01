@@ -46,10 +46,18 @@ export const PHRASE_TELLS: TellPattern[] = [
   { id: 'not-only', label: '"not only … but also"', severity: 'major', pattern: /\bnot\s+only\b[^.!?]{0,120}\bbut\s+also\b/gi, fix: 'Split into two sentences.' },
   { id: 'whether-youre', label: '"whether you\'re … or …"', severity: 'major', pattern: /\bwhether\s+you'?re\b[^.!?]{0,120}\bor\b/gi, fix: 'Address one reader, specifically.' },
   { id: 'plays-a-role', label: '"plays a crucial/vital role"', severity: 'major', pattern: /\bplays?\s+(a|an)\s+\w+\s+role\b/gi, fix: 'Say what it does.' },
+  { id: 'hype-adjectives', label: '"vibrant / bustling / thrilling / electrifying / unparalleled"', severity: 'major', pattern: /\b(vibrant|bustling|thrilling|electrifying|unparalleled|breathtaking|awe-inspiring)\b/gi, fix: 'Cut the adjective; give the fact that would make the reader feel it.' },
+  { id: 'nestled', label: '"nestled / boasts / showcases"', severity: 'major', pattern: /\b(nestled|boasts?|boasting|showcas(e|es|ing))\b/gi, fix: 'Use "is in", "has" or "shows".' },
+  { id: 'spectacle', label: '"spectacle"', severity: 'major', pattern: /\bspectacle\b/gi, fix: 'Name what happens.' },
+  { id: 'look-no-further', label: '"look no further / buckle up / it\'s no secret"', severity: 'major', pattern: /\b(look\s+no\s+further|buckle\s+up|it'?s\s+no\s+secret)\b/gi, fix: 'Delete it and start with the point.' },
+  { id: 'not-just', label: '"it\'s not just X, it\'s Y"', severity: 'major', pattern: /\b(it'?s|this\s+is|that'?s)\s+not\s+(just|only|merely)\b[^.!?]{0,80}[,;]\s*(it'?s|this\s+is|that'?s)\b/gi, fix: 'State what it is, once.' },
+  { id: 'heres-the-thing', label: '"here\'s the thing"', severity: 'major', pattern: /\bhere'?s\s+the\s+(thing|deal|kicker|catch)\b/gi, fix: 'Cut the set-up and say it.' },
+  { id: 'crucial-major', label: '"crucial"', severity: 'major', pattern: /\bcrucial\b/gi, fix: 'Show why it matters instead of asserting it.' },
+  { id: 'exclamation', label: 'exclamation marks', severity: 'major', pattern: /[a-z0-9)"']!(?=\s|$)/gi, fix: 'Use a full stop. Let the fact carry the excitement.' },
   { id: 'harness', label: '"harness the power"', severity: 'major', pattern: /\bharness(ing|es)?\s+(the\s+)?(power|potential)\b/gi, fix: 'Say what it achieves.' },
 
-  { id: 'furthermore', label: 'stacked "furthermore / moreover"', severity: 'minor', pattern: /\b(furthermore|moreover)\b/gi, fix: 'Fine once. Three times reads as filler.' },
-  { id: 'crucial', label: '"crucial / vital / pivotal"', severity: 'minor', pattern: /\b(crucial|vital|pivotal|paramount)\b/gi, fix: 'Show why it matters instead of asserting it.' },
+  { id: 'furthermore', label: 'stacked "furthermore / moreover / additionally / ultimately / notably"', severity: 'minor', pattern: /\b(furthermore|moreover|additionally|ultimately|notably)\b/gi, fix: 'Fine once. Three times reads as filler.' },
+  { id: 'crucial', label: '"vital / pivotal / paramount"', severity: 'minor', pattern: /\b(vital|pivotal|paramount)\b/gi, fix: 'Show why it matters instead of asserting it.' },
   { id: 'comprehensive', label: '"comprehensive"', severity: 'minor', pattern: /\bcomprehensive\b/gi, fix: 'Say what it covers.' },
   { id: 'myriad', label: '"a myriad of" / "plethora"', severity: 'minor', pattern: /\b(a\s+)?(myriad|plethora)\s+(of\s+)?/gi, fix: 'Give the number.' },
   { id: 'foster', label: '"foster" / "cultivate"', severity: 'minor', pattern: /\b(foster|cultivat)(s|ing|ed)?\b/gi, fix: 'Use a plain verb.' },
@@ -71,5 +79,5 @@ export const DOUBLE_HYPHEN = /(?<=\S)\s*--\s*(?=\S)/g;
 /** Sentence openers that read as machine transitions when stacked. */
 export const TRANSITION_OPENERS = [
   'additionally', 'furthermore', 'moreover', 'in addition', 'consequently',
-  'therefore', 'thus', 'however', 'nevertheless', 'nonetheless',
+  'therefore', 'thus', 'however', 'nevertheless', 'nonetheless', 'ultimately', 'notably',
 ];

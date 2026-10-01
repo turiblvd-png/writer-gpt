@@ -1,5 +1,8 @@
 'use client';
 
+import { lengthBudget } from '@/lib/semantic/brief';
+import { plannedOutline } from '@/lib/semantic/quality';
+
 import { useState } from 'react';
 import type { StageApi } from './workspace';
 import { Notice, Panel, Spinner } from '@/components/semantic-ui';
@@ -255,6 +258,7 @@ export function OutlineStage({ api }: { api: StageApi }) {
 export function WordCountStage({ api }: { api: StageApi }) {
   const { project, patch } = api;
   const { wordCount } = project.data;
+  const budget = lengthBudget(plannedOutline(project), wordCount.target);
 
   return (
     <Panel icon={<IconTarget />} title="Target word count" subtitle="Optional, auto follows the competitor average.">
@@ -303,6 +307,14 @@ export function WordCountStage({ api }: { api: StageApi }) {
         className="w-full accent-accent disabled:opacity-40"
       />
       <div className="mt-1 flex justify-between text-[11px] text-ink-3"><span>600</span><span>5,000</span></div>
+
+      {budget.raised && (
+        <Notice tone="warn">
+          The outline has {budget.h2} H2 and {budget.h3} H3 sections. Saying something useful under each needs about{' '}
+          {budget.minimum.toLocaleString()} words, so the brief will ask for that. To keep {wordCount.target.toLocaleString()} words,
+          remove headings in Outline Creation.
+        </Notice>
+      )}
 
       <Notice tone="info">
         Length is not a ranking factor by itself. Under-covering what competitors cover is the real risk, and padding

@@ -98,6 +98,49 @@ export interface ArticleOutput {
   unverifiedClaims?: string[];
   /** 0–100 from the AI-tell detector, after any style repair rounds. */
   humanScore?: number;
+  /** The post-writing self-check against the brief. */
+  quality?: QualityReport;
+  /** Suggested alt text for the article's images. */
+  altTexts?: string[];
+}
+
+export type FactStatus = 'confirmed' | 'reported' | 'conflicting' | 'unconfirmed';
+
+export interface VerifiedFact {
+  id: string;
+  /** What the fact is about, e.g. "2026 dates". */
+  label: string;
+  value: string;
+  status: FactStatus;
+  /** Name of the source (site or publication), and its URL when known. */
+  source?: string;
+  url?: string;
+  /** True when the user added or edited it by hand. */
+  manual?: boolean;
+}
+
+export interface FactSheet {
+  facts: VerifiedFact[];
+  /** Sources the article may cite in its Sources section. */
+  sources: { name: string; url?: string }[];
+  /** False when live search was unavailable, so nothing could be confirmed. */
+  liveSearch: boolean;
+  researchedAt: number;
+}
+
+export interface QualityCheck {
+  id: string;
+  label: string;
+  ok: boolean;
+  detail: string;
+}
+
+export interface QualityReport {
+  checks: QualityCheck[];
+  passed: number;
+  total: number;
+  /** True when an automatic revision pass ran to fix failed checks. */
+  revised: boolean;
 }
 
 /** Everything the 14 stages accumulate. Each key belongs to one stage. */
@@ -121,6 +164,8 @@ export interface ProjectData {
   seoRules: SeoRules;
   aiInstructions: string;
   megaPrompt?: string;
+  /** Checked facts the writer may use for specifics (Master Prompt stage). */
+  facts?: FactSheet;
   article?: ArticleOutput;
 }
 

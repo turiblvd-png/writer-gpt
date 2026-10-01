@@ -31,11 +31,11 @@ describe('buildMegaPrompt', () => {
       ],
     }), clock);
 
-    const required = prompt.slice(prompt.indexOf('REQUIRED'), prompt.indexOf('WORTH INCLUDING'));
+    const required = prompt.slice(prompt.indexOf('REQUIRED'), prompt.indexOf('OPTIONAL ('));
     expect(required).toContain('ATP Tour');
     expect(required).toContain('Riyadh Season');
     expect(required).not.toContain('GreenSet');
-    expect(prompt.slice(prompt.indexOf('WORTH INCLUDING'))).toContain('GreenSet Worldwide');
+    expect(prompt.slice(prompt.indexOf('OPTIONAL ('))).toContain('GreenSet Worldwide');
   });
 
   it('omits every item the user excluded', () => {

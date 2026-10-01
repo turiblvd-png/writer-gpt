@@ -61,6 +61,7 @@ function run(id: string, action: string, body: { urls?: string[]; scope?: A.Enti
     case 'recompute-all':        return A.recomputeAll(id);
     case 'generate-questions':   return A.generateQuestions(id);
     case 'compile-mega-prompt':  return compileMegaPrompt(id);
+    case 'research-facts':       return A.researchFacts(id);
     case 'generate-article':     return A.generateArticle(id);
     default:
       throw new Error(`Unknown action "${action}".`);

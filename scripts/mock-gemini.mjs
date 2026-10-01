@@ -53,6 +53,19 @@ No. It is an exhibition, so results never touch the ATP rankings.
 At ANB Arena in Riyadh, during Riyadh Season.`;
 
 function answer(prompt) {
+  if (/List the specific facts a reader needs/i.test(prompt))
+    return 'FACT: Dates | 15-18 October 2026 | riyadhseason.com | CONFIRMED\nFACT: Venue | ANB Arena, Riyadh | riyadhseason.com | CONFIRMED\nFACT: Ticket prices | not announced for 2026 | none | UNCONFIRMED';
+  if (/Build a fact sheet for an article/i.test(prompt))
+    return JSON.stringify({ facts: [
+      { label: '2026 dates', value: '15-18 October 2026', status: 'confirmed', source: 'riyadhseason.com' },
+      { label: 'Venue', value: 'ANB Arena, Riyadh', status: 'confirmed', source: 'riyadhseason.com' },
+      { label: 'Broadcaster', value: 'Netflix, live worldwide', status: 'reported', source: 'Example guide', url: 'https://guide.example/six-kings' },
+      { label: '2026 ticket prices', value: 'not yet announced', status: 'unconfirmed' },
+    ], sources: [{ name: 'Riyadh Season', url: '' }, { name: 'Example guide', url: 'https://guide.example/six-kings' }] });
+  if (/Revise the article below so it passes these checks/i.test(prompt)) {
+    const m = /ARTICLE:\n([\s\S]*?)\n\nReturn the complete revised article/.exec(prompt);
+    return (m ? m[1] : ARTICLE) + '\n\n## Sources\n\nRiyadh Season and the Example guide.';
+  }
   if (/Write social posts promoting this article/i.test(prompt))
     return JSON.stringify({ posts: [
       { platform: 'linkedin', parts: ['The 2026 Six Kings Slam runs 21-24 October at ANB Arena in Riyadh.\n\nSix players, two byes, one of the richest purses in tennis. Here is how to get tickets and watch it.\n\nWhich match are you watching first?\n\n[LINK]'], hashtags: ['SixKingsSlam', 'Tennis'] },
@@ -90,6 +103,8 @@ function answer(prompt) {
     return 'DOMINANT INTENT: Find 2026 dates, tickets and how to watch.\nWINNABLE ANGLE: "Six Kings Slam 2026 tickets and dates".';
   if (/Produce the heading outline/i.test(prompt))
     return JSON.stringify({ headings: ['## When is the Six Kings Slam 2026?', '## Who is playing?', '## How do you buy Six Kings Slam tickets?', '## How can you watch it?', '## FAQ', '### Does the Six Kings Slam give ranking points?'] });
+  if (/Produce SEO metadata/i.test(prompt) && /altTexts/.test(prompt))
+    return JSON.stringify({ seoTitle: 'Six Kings Slam 2026: Tickets, Dates and Players', metaDescription: 'Six Kings Slam 2026 runs 15-18 October at ANB Arena in Riyadh. Dates, tickets, players and how to watch on Netflix.', slug: 'six-kings-slam-2026', altTexts: ['ANB Arena in Riyadh set up for the Six Kings Slam', 'Six Kings Slam 2026 match schedule table'] });
   if (/Produce SEO metadata/i.test(prompt))
     return JSON.stringify({ seoTitle: 'Six Kings Slam 2026: Dates, Tickets & How to Watch', metaDescription: 'Six Kings Slam 2026 runs 21 to 24 October at ANB Arena, Riyadh. See the field, ticket options by night and how to stream every match on Netflix.', slug: 'six-kings-slam-2026-tickets-dates', focusKeyword: 'six kings slam 2026', keywords: ['six kings slam tickets', 'anb arena', 'riyadh season'] });
   if (/Fact-check this draft|Fact-check this draft against live search/i.test(prompt))
