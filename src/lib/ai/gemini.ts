@@ -274,9 +274,11 @@ export class OpenAiCompatProvider implements LlmProvider {
         model: this.model,
         messages,
         temperature: req.temperature ?? 0.7,
-        // DeepSeek stops at 4K output tokens unless asked, which cuts a long
-        // article off mid-section. 8K is its ceiling for chat models.
-        max_tokens: req.maxOutputTokens ?? (this.id === 'deepseek' ? 8192 : undefined),
+        // DeepSeek's default output cap is small, and its thinking mode spends
+        // part of the cap on reasoning, which cut long articles off
+        // mid-section. Current models allow up to 384K; 32K leaves room for
+        // thinking plus a long draft without inviting runaway bills.
+        max_tokens: req.maxOutputTokens ?? (this.id === 'deepseek' ? 32_768 : undefined),
         ...(req.json ? { response_format: { type: 'json_object' } } : {}),
       }),
       signal: req.signal ?? null,
