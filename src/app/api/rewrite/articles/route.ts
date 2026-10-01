@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
 import { listRewritten } from '@/lib/rewrite/store';
+import { safeRead } from '@/lib/db/safe';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
-  return NextResponse.json({ articles: listRewritten() });
+  return NextResponse.json({ articles: safeRead(() => listRewritten(), [], 'listRewritten') });
 }

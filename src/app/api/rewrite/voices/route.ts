@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createBrandVoice, listBrandVoices } from '@/lib/rewrite/store';
+import { safeRead } from '@/lib/db/safe';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -12,7 +13,7 @@ const schema = z.object({
 });
 
 export async function GET() {
-  return NextResponse.json({ voices: listBrandVoices() });
+  return NextResponse.json({ voices: safeRead(() => listBrandVoices(), [], 'listBrandVoices') });
 }
 
 export async function POST(request: Request) {

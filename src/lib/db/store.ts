@@ -92,10 +92,11 @@ export function getDb(): Database.Database {
     db = open(path);
     mode = SERVERLESS || path.startsWith('/tmp') ? 'ephemeral' : 'persistent';
   } catch (err) {
+    storageError = err instanceof Error ? err.message : String(err);
+
     // A read-only or full filesystem must not take the whole app down. An
     // in-memory database keeps every page working; the UI says data will not
     // be kept so nobody mistakes it for durable storage.
-    storageError = err instanceof Error ? err.message : String(err);
     db = new Database(':memory:');
     mode = 'memory';
   }

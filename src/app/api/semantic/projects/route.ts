@@ -1,12 +1,13 @@
 import { NextResponse } from 'next/server';
 import { createProjectSchema } from '@/lib/semantic/types';
 import { createProject, listProjects } from '@/lib/semantic/store';
+import { safeRead } from '@/lib/db/safe';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
-  return NextResponse.json({ projects: listProjects() });
+  return NextResponse.json({ projects: safeRead(() => listProjects(), [], 'listProjects') });
 }
 
 export async function POST(request: Request) {

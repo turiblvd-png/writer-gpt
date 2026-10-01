@@ -6,10 +6,32 @@ import { STEPS } from '@/lib/semantic/steps';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+/**
+ * Deployment diagnostics.
+ *
+ * `build` exists because an earlier version of this route read only env vars,
+ * so it returned a healthy 200 while every page was failing. That made it
+ * impossible to tell which commit was actually live. The commit SHA settles it.
+ */
 export async function GET() {
+  // Never let a storage fault take down the one endpoint used to diagnose it.
+  let storage;
+  try {
+    storage = storageStatus();
+  } catch (err) {
+    storage = { mode: 'memory', path: 'none', error: err instanceof Error ? err.message : String(err) };
+  }
+
   return NextResponse.json({
     ok: true,
-    storage: storageStatus(),
+    build: {
+      commit: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? 'local',
+      branch: process.env.VERCEL_GIT_COMMIT_REF ?? null,
+      message: process.env.VERCEL_GIT_COMMIT_MESSAGE ?? null,
+      host: process.env.VERCEL ? 'vercel' : 'self-hosted',
+      node: process.version,
+    },
+    storage,
     providers: configuredProviders(),
     tools: {
       'generate-content': 'ready',
