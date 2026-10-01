@@ -153,6 +153,16 @@ createServer((req, res) => {
     const m = /models\/([^:]+):generateContent/.exec(req.url ?? '');
     if (!m) { res.statusCode = 404; res.end('{}'); return; }
 
+    // QUOTA_ALL=1 answers every Gemini call with a per-minute 429, as a busy free key does.
+    if (process.env.QUOTA_ALL) {
+      res.statusCode = 429;
+      res.end(JSON.stringify({ error: { code: 429, status: 'RESOURCE_EXHAUSTED', message: `Quota exceeded for metric: generate_content_free_tier_requests, limit: 10, model: ${m[1]}`,
+        details: [
+          { '@type': 'type.googleapis.com/google.rpc.QuotaFailure', violations: [{ quotaId: 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', quotaValue: '10' }] },
+          { '@type': 'type.googleapis.com/google.rpc.RetryInfo', retryDelay: '45s' },
+        ] } }));
+      return;
+    }
     // QUOTA_PRO=1 answers every Pro call the way Google does for a free key with no Pro allowance.
     if (process.env.QUOTA_PRO && /pro/.test(m[1])) {
       res.statusCode = 429;

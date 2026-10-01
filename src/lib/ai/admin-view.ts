@@ -6,7 +6,7 @@ export interface AiAdminView {
   keys: Awaited<ReturnType<typeof keySources>>;
   roles: Record<ModelRole, { provider: ProviderId; model: string; source: BindingSource }>;
   fallbackOrder: ProviderId[];
-  allowUngrounded: boolean;
+  strictSearch: boolean;
   defaults: typeof DEFAULT_MODELS;
 }
 
@@ -25,7 +25,7 @@ export async function aiAdminView(): Promise<AiAdminView> {
     keys: await keySources(),
     roles,
     fallbackOrder: settings.fallbackOrder,
-    allowUngrounded: settings.allowUngrounded,
+    strictSearch: settings.strictSearch ?? false,
     defaults: DEFAULT_MODELS,
   };
 }

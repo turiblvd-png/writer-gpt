@@ -46,7 +46,7 @@ export function AiModelsWorkspace({ initial }: { initial: AiAdminView }) {
   const [keyDrafts, setKeyDrafts] = useState<Partial<Record<ProviderId, string>>>({});
   const [roles, setRoles] = useState(() => Object.fromEntries(ROLES.map((r) => [r.id, { provider: initial.roles[r.id].provider, model: initial.roles[r.id].model }])) as Record<ModelRole, { provider: ProviderId; model: string }>);
   const [order, setOrder] = useState<ProviderId[]>(initial.fallbackOrder);
-  const [allowUngrounded, setAllowUngrounded] = useState(initial.allowUngrounded);
+  const [strictSearch, setStrictSearch] = useState(initial.strictSearch);
   const [tests, setTests] = useState<Record<string, TestResult | 'running'>>({});
   const [saving, setSaving] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ tone: 'ok' | 'bad'; text: string } | null>(null);
@@ -214,8 +214,8 @@ export function AiModelsWorkspace({ initial }: { initial: AiAdminView }) {
         title="3. If a provider fails"
         subtitle="Drag to set the order. When a task's provider fails (bad key, no balance, outage), the next connected provider takes over automatically."
         action={
-          <button className="btn-primary" disabled={saving !== null || (order.join() === view.fallbackOrder.join() && allowUngrounded === view.allowUngrounded)}
-                  onClick={() => void save('Fallback order', { fallbackOrder: order, allowUngrounded })}>
+          <button className="btn-primary" disabled={saving !== null || (order.join() === view.fallbackOrder.join() && strictSearch === view.strictSearch)}
+                  onClick={() => void save('Fallback order', { fallbackOrder: order, strictSearch })}>
             {saving === 'Fallback order' ? <><Spinner /> Saving…</> : 'Save order'}
           </button>
         }
@@ -233,10 +233,13 @@ export function AiModelsWorkspace({ initial }: { initial: AiAdminView }) {
           )}
         />
         <label className="mt-4 flex items-start gap-3 text-sm">
-          <input type="checkbox" className="mt-1" checked={allowUngrounded} onChange={(e) => setAllowUngrounded(e.target.checked)} />
+          <input type="checkbox" className="mt-1" checked={strictSearch} onChange={(e) => setStrictSearch(e.target.checked)} />
           <span>
-            <strong>Keep working without Google Search if Gemini fails.</strong>{' '}
-            <span className="text-ink-3">Research and fact checks fall back to another provider without live search. Off keeps every article researched, but a Gemini outage then stops new articles.</span>
+            <strong>Stop instead of writing without live search.</strong>{' '}
+            <span className="text-ink-3">
+              Off (recommended): if Gemini fails, research and fact checks switch to the next provider automatically and the
+              customer never sees an error. On: those steps stop until Gemini works again, so every article is researched live.
+            </span>
           </span>
         </label>
       </Panel>

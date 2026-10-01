@@ -20,7 +20,7 @@ export function PUT(request: Request) {
       ...Object.entries(patch.keys ?? {}).map(([p, v]) => `${p} key ${v ? 'saved' : 'removed'}`),
       ...Object.entries(patch.roles ?? {}).map(([r, c]) => `${r} -> ${c ? `${c.provider}:${c.model}` : 'default'}`),
       ...(patch.fallbackOrder ? [`fallback order ${patch.fallbackOrder.join(' > ')}`] : []),
-      ...(patch.allowUngrounded !== undefined ? [`no-search fallback ${patch.allowUngrounded ? 'on' : 'off'}`] : []),
+      ...(patch.strictSearch !== undefined ? [`search steps ${patch.strictSearch ? 'stop when Gemini fails' : 'fall back without search'}`] : []),
     ];
     await logActivity({ kind: 'admin', action: 'admin.ai_settings', ok: true, detail: parts.join('; ') });
     return NextResponse.json(await aiAdminView());

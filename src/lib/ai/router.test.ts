@@ -80,21 +80,36 @@ describe('AI router', () => {
     expect(calls.map((c) => c.provider)).toEqual(['gemini', 'grok']);
   });
 
-  it('never runs a search step without search unless allowed', async () => {
+  it('hands a search step to the next provider without search, unless told to stop', async () => {
     process.env.GEMINI_API_KEY = 'g';
     process.env.DEEPSEEK_API_KEY = 'd';
     behaviour.gemini = () => new Error('Gemini rate limit or quota reached.');
     const { complete } = await import('./index');
-    await expect(complete('research', { prompt: 'research', grounded: true }, { retries: 0 })).rejects.toThrow(/needs live search/);
-    expect(calls.map((c) => c.provider)).toEqual(['gemini']);
-
-    const { updateAiSettings } = await import('@/lib/platform/settings');
-    await updateAiSettings({ allowUngrounded: true });
     const res = await complete('research', { prompt: 'research', grounded: true }, { retries: 0 });
     expect(res.provider).toBe('deepseek');
     const last = calls.at(-1)!;
     expect(last.grounded).toBe(false);
     expect(last.prompt).toMatch(/live web search is unavailable/);
+
+    const { updateAiSettings } = await import('@/lib/platform/settings');
+    await updateAiSettings({ strictSearch: true });
+    calls.length = 0;
+    await expect(complete('research', { prompt: 'research', grounded: true }, { retries: 0 })).rejects.toThrow(/set to stop/);
+    expect(calls.map((c) => c.provider)).toEqual(['gemini']);
+  });
+
+  it('shows customers a friendly message and the developer the real reason', async () => {
+    process.env.GEMINI_API_KEY = 'g';
+    behaviour.gemini = () => new Error("Gemini's per-minute limit was reached for gemini-2.5-flash-lite.");
+    const { complete, CUSTOMER_AI_ERROR } = await import('./index');
+    const { runAs } = await import('@/lib/auth/actor');
+    const customer = { id: 'c1', email: 'c@x.co', role: 'subscriber' as const };
+    const dev = { id: 'd1', email: 'turi.ishtiaq@gmail.com', role: 'owner' as const };
+    await expect(runAs(customer, () => complete('draft', { prompt: 'x' }, { retries: 0 }))).rejects.toThrow(CUSTOMER_AI_ERROR);
+    await expect(runAs(dev, () => complete('draft', { prompt: 'x' }, { retries: 0 }))).rejects.toThrow(/per-minute limit/);
+    const { listActivity } = await import('@/lib/activity/log');
+    const failed = (await listActivity({ ok: false })).find((e) => e.userId === 'c1');
+    expect(failed?.error).toMatch(/per-minute limit/);
   });
 
   it('records usage against the signed-in user', async () => {

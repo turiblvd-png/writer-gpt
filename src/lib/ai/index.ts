@@ -5,6 +5,23 @@ import { apiKeyFor, getAiSettings, PROVIDERS, ROLES, type ModelRole } from '@/li
 import { estimateCost, recordUsage } from '@/lib/usage/meter';
 import { assertWithinLimits } from '@/lib/usage/limits';
 import { logActivity } from '@/lib/activity/log';
+import { currentActor } from '@/lib/auth/actor';
+
+/**
+ * What a customer sees when every provider failed. The technical reason goes
+ * to the Activity log and is shown in full only to the developer and admins:
+ * provider names, quotas and keys are not the customer's concern.
+ */
+export const CUSTOMER_AI_ERROR =
+  'Our AI is very busy right now and could not finish this step. Please try again in a minute. Your work so far is saved.';
+
+async function forViewer(error: Error): Promise<Error> {
+  const actor = await currentActor();
+  if (!actor || actor.role === 'owner' || actor.role === 'admin') return error;
+  const friendly = new Error(CUSTOMER_AI_ERROR);
+  friendly.name = 'AiUnavailableError';
+  return friendly;
+}
 
 export * from './types';
 export type { ModelRole };
@@ -161,8 +178,8 @@ export async function complete(role: ModelRole, req: CompletionRequest, opts: { 
     if (req.grounded && binding.provider !== 'gemini') {
       // Only Gemini searches the web here. A non-search provider may stand in
       // when the developer picked it for this task, or allowed it as a fallback.
-      if (!chosen && !settings.allowUngrounded) {
-        failures.push(`${binding.provider}: skipped, this step needs live search (allow it under Developer → AI Models)`);
+      if (!chosen && settings.strictSearch) {
+        failures.push(`${binding.provider}: skipped, search steps are set to stop when Gemini fails (Developer → AI Models)`);
         continue;
       }
       request = { ...req, grounded: false, prompt: UNGROUNDED_NOTE + req.prompt };
@@ -201,7 +218,7 @@ export async function complete(role: ModelRole, req: CompletionRequest, opts: { 
     kind: 'ai', action: 'ai.request', role, ok: false,
     provider: primary.provider, model: primary.model, ms: Date.now() - started, error: error.message,
   });
-  throw error;
+  throw await forViewer(error);
 }
 
 function sleep(ms: number) {

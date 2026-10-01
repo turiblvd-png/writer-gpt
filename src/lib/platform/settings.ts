@@ -28,11 +28,12 @@ export interface AiSettings {
   /** Tried in this order when a task's own provider fails. */
   fallbackOrder: ProviderId[];
   /**
-   * Research and fact checks need live Google Search, which only Gemini
-   * provides here. When true, they may run on another provider without search
-   * if Gemini fails, rather than stopping the job.
+   * Research and fact checks use live Google Search, which only Gemini
+   * provides here. By default, when Gemini fails, they hand over to the next
+   * provider and run without search so the customer's job still finishes.
+   * When true, they stop instead. (Replaces the older opt-in allowUngrounded.)
    */
-  allowUngrounded: boolean;
+  strictSearch: boolean;
 }
 
 export interface NavSettings {
@@ -55,7 +56,7 @@ interface SettingsDoc {
 
 const store = collection<SettingsDoc>('settings', { global: true });
 
-export const DEFAULT_AI: AiSettings = { keys: {}, roles: {}, fallbackOrder: ['gemini', 'deepseek', 'grok'], allowUngrounded: false };
+export const DEFAULT_AI: AiSettings = { keys: {}, roles: {}, fallbackOrder: ['gemini', 'deepseek', 'grok'], strictSearch: false };
 export const DEFAULT_PLATFORM: PlatformSettings = { signupsOpen: true, nav: { order: {}, hidden: [] } };
 
 const TTL = 15_000;
@@ -156,7 +157,7 @@ export interface AiSettingsPatch {
   keys?: Partial<Record<ProviderId, string>>;
   roles?: Partial<Record<ModelRole, RoleChoice | null>>;
   fallbackOrder?: ProviderId[];
-  allowUngrounded?: boolean;
+  strictSearch?: boolean;
 }
 
 export async function updateAiSettings(patch: AiSettingsPatch): Promise<AiSettings> {
@@ -182,7 +183,7 @@ export async function updateAiSettings(patch: AiSettingsPatch): Promise<AiSettin
     keys,
     roles,
     fallbackOrder,
-    allowUngrounded: patch.allowUngrounded ?? current.allowUngrounded,
+    strictSearch: patch.strictSearch ?? current.strictSearch ?? false,
   });
 }
 
