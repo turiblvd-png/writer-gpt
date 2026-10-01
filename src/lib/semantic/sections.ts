@@ -1,5 +1,6 @@
-import { keywordTargets, lengthBudget, OPENING_WORDS, splitKeywords, type LengthBudget } from './brief';
-import { plannedOutline } from './quality';
+import { keywordTargets, lengthBudget, splitKeywords, type LengthBudget } from './brief';
+import { plannedOutline, requiredEntities, topicWords } from './quality';
+import { factLine } from './fact-block';
 import type { OutlineHeading, SemanticProject } from './types';
 
 /**
@@ -27,8 +28,12 @@ export interface ArticlePart {
   /** Carries the H1, "Last updated" line, definition and key takeaways. */
   opening: boolean;
   last: boolean;
+  /** Words budgeted directly under each of `headings`. */
+  headingWords: number[];
   /** Required entities this part is responsible for naming. */
   entities: string[];
+  /** Facts whose home is in this part: stated in full here and only here. */
+  facts: string[];
   keywords: PartKeyword[];
 }
 
@@ -55,21 +60,20 @@ export function planParts(project: SemanticProject): PartPlan {
   const outline = plannedOutline(project);
   const budget = lengthBudget(outline, project.data.wordCount.target);
 
+  const wordsOf = new Map(outline.map((h, i) => [h, budget.weights[i] ?? 0] as const));
+
   // 1. One block per H2 (with its H3s); everything before the first H2 is the opening.
-  const blocks: Block[] = [{ headings: [], weight: OPENING_WORDS, opening: true }];
+  const blocks: Block[] = [{ headings: [], weight: budget.opening, opening: true }];
   for (const h of outline) {
-    if (h.level === 2) blocks.push({ headings: [h], weight: budget.perH2Intro, opening: false });
+    if (h.level === 2) blocks.push({ headings: [h], weight: wordsOf.get(h) ?? 0, opening: false });
     else {
       const cur = blocks[blocks.length - 1]!;
       cur.headings.push(h);
-      cur.weight += h.level >= 3 ? budget.perH3 : 0;
+      cur.weight += wordsOf.get(h) ?? 0;
     }
   }
-
-  // 2. Scale block weights to the effective length.
-  const total = blocks.reduce((s, b) => s + b.weight, 0) || 1;
-  const scale = budget.effective / total;
-  for (const b of blocks) b.weight = Math.max(40, Math.round(b.weight * scale));
+  // 2. Budgets are per heading already; a block is never smaller than a short section.
+  for (const b of blocks) b.weight = Math.max(40, b.weight);
 
   // 3. Split oversized H2 blocks at H3 boundaries.
   const sized: Block[] = [];
@@ -108,13 +112,16 @@ export function planParts(project: SemanticProject): PartPlan {
   const parts: ArticlePart[] = groups.map((g, index) => ({
     index,
     headings: g.flatMap((b) => b.headings),
+    headingWords: g.flatMap((b) => b.headings).map((h) => wordsOf.get(h) ?? 0),
     words: Math.max(80, Math.round(g.reduce((s, b) => s + b.weight, 0) / 10) * 10),
     opening: g.some((b) => b.opening),
     last: index === groups.length - 1,
     entities: [],
+    facts: [],
     keywords: [],
   }));
 
+  assignFacts(project, parts);
   assignEntities(project, parts);
   assignKeywords(project, parts, budget.effective);
 
@@ -122,22 +129,51 @@ export function planParts(project: SemanticProject): PartPlan {
   return { parts, budget, outline, key };
 }
 
-/** Each required entity goes to the part whose headings mention it, else the least loaded part. */
+const sectionText = (p: ArticlePart) => p.headings.flatMap((h) => [h.text, ...(h.covers ?? [])]).join(' \n ');
+const isSourcesOnly = (p: ArticlePart) => p.headings.length > 0 && p.headings.every((h) => /^\s*(sources?|references|further reading)\b/i.test(h.text));
+
+/**
+ * Gives every fact one home: the part whose headings share the most topic
+ * words with it. Parts are written at the same time, so without a home each
+ * writer restates the dates, venue and prices and the joined article repeats
+ * them six or eight times. Facts with no clear home open the article.
+ */
+function assignFacts(project: SemanticProject, parts: ArticlePart[]) {
+  const sheet = project.data.facts;
+  if (!sheet?.facts.length) return;
+  const ignore = topicWords(project.mainKeyword);
+  const homes = parts.map((p) => (isSourcesOnly(p) ? new Set<string>() : topicWords(sectionText(p), ignore)));
+  for (const f of sheet.facts) {
+    const label = topicWords(f.label, ignore);
+    const value = topicWords(f.value, ignore);
+    let best = 0;
+    let score = 0;
+    homes.forEach((words, i) => {
+      let s = 0;
+      for (const w of label) if (words.has(w)) s += 2;
+      for (const w of value) if (words.has(w)) s += 1;
+      if (s > score) {
+        score = s;
+        best = i;
+      }
+    });
+    parts[best]!.facts.push(factLine(f));
+  }
+}
+
+/**
+ * A required entity goes to the part whose headings or facts mention it.
+ * One with no home stays optional: forcing it into an unrelated section is
+ * worse for readers and rankings than leaving it out.
+ */
 function assignEntities(project: SemanticProject, parts: ArticlePart[]) {
-  const d = project.data;
-  const keywordSet = new Set(splitKeywords(project.mainKeyword).map((k) => k.toLowerCase()));
-  const excluded = new Set(d.excludedEntities.map((e) => e.toLowerCase()));
-  const required = d.entities.filter(
-    (e) => (e.documentFrequency ?? 0) >= 2 && !excluded.has(e.name.toLowerCase()) && !keywordSet.has(e.name.toLowerCase()),
-  );
-  // Sources and FAQ parts are poor homes for an entity's explanation.
-  const eligible = parts.filter((p) => !p.headings.every((h) => /\b(sources?|references)\b/i.test(h.text)));
-  const pool = eligible.length ? eligible : parts;
-  for (const e of required) {
-    const name = e.name.replace(/\s*\(.*\)$/, '').toLowerCase();
-    const home = pool.find((p) => p.headings.some((h) => h.text.toLowerCase().includes(name)));
-    const target = home ?? [...pool].sort((a, b) => a.entities.length / a.words - b.entities.length / b.words)[0]!;
-    target.entities.push(e.name.replace(/\s*\(.*\)$/, ''));
+  const pool = parts.filter((p) => !isSourcesOnly(p));
+  for (const name of requiredEntities(project)) {
+    const n = name.toLowerCase();
+    const home =
+      pool.find((p) => sectionText(p).toLowerCase().includes(n)) ??
+      pool.find((p) => p.facts.some((f) => f.toLowerCase().includes(n)));
+    home?.entities.push(name);
   }
 }
 

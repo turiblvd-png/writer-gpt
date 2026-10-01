@@ -8,7 +8,7 @@ function project(): SemanticProject {
     createdAt: 0, updatedAt: 0,
     data: {
       competitors: [], outlines: [], competitorContent: [], ngrams: [], nlpKeywords: [], skipGrams: [], excludedEntities: [], excludedNgrams: [], excludedKeywords: [],
-      combinedOutline: [{ level: 1, text: 'Heat pump guide' }, { level: 2, text: 'What does a heat pump cost?' }, { level: 2, text: 'FAQ' }],
+      combinedOutline: [{ level: 1, text: 'Heat pump guide' }, { level: 2, text: 'What does a heat pump cost?' }, { level: 2, text: 'Daikin vs Mitsubishi Electric' }, { level: 2, text: 'FAQ' }],
       wordCount: { target: 300, auto: false },
       entities: [{ name: 'Daikin', source: 'competitor', documentFrequency: 3 }, { name: 'Mitsubishi Electric', source: 'competitor', documentFrequency: 2 }],
       autoSuggest: [], selectedQuestions: ['How long does a heat pump last'],

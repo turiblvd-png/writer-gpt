@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { keywordTargets, lengthBudget, splitKeywords, usefulPairs, usefulPhrases, usefulTerms, withFaqQuestions } from './brief';
+import { compactOutline, keywordTargets, lengthBudget, splitKeywords, usefulPairs, usefulPhrases, usefulTerms, withFaqQuestions } from './brief';
 import { parseFactSheet } from './facts';
 import { factSheetBlock } from './fact-block';
 import type { OutlineHeading } from './types';
@@ -21,13 +21,26 @@ describe('brief planning', () => {
 
   it('raises the length when the outline cannot fit the target', () => {
     const outline = [h(1, 'T'), ...Array.from({ length: 9 }, (_, i) => h(2, `H2 ${i}`)), ...Array.from({ length: 29 }, (_, i) => h(3, `H3 ${i}`))];
-    const b = lengthBudget(outline, 1200);
+    const fitted = compactOutline(outline, 1200);
+    const b = lengthBudget(fitted, 1200);
     expect(b.raised).toBe(true);
-    // A tight floor: a short answer per heading, not a doubled article.
-    expect(b.minimum).toBeGreaterThanOrEqual(1500);
+    // Nine real sections need room, but not a heading over every fragment.
+    expect(b.minimum).toBeGreaterThanOrEqual(1300);
     expect(b.minimum).toBeLessThanOrEqual(1900);
-    expect(b.perH3).toBeGreaterThanOrEqual(45);
-    expect(lengthBudget(outline.slice(0, 8), 1200).raised).toBe(false);
+    expect(b.weights).toHaveLength(fitted.length);
+    expect(lengthBudget(compactOutline(outline.slice(0, 5), 1200), 1200).raised).toBe(false);
+  });
+
+  it('folds subheadings the length cannot carry into their section, keeping every topic', () => {
+    const outline = [h(1, 'T'), h(2, 'A'), h(3, 'a1'), h(3, 'a2'), h(3, 'a3'), h(2, 'B'), h(3, 'b1'), h(2, 'FAQ'), h(3, 'Q1?'), h(3, 'Q2?'), h(2, 'Sources')];
+    const short = compactOutline(outline, 900);
+    expect(short.filter((x) => x.level === 3).map((x) => x.text)).toEqual(['Q1?', 'Q2?']);
+    expect(short.find((x) => x.text === 'A')!.covers).toEqual(['a1', 'a2', 'a3']);
+    expect(short.find((x) => x.text === 'B')!.covers).toEqual(['b1']);
+    // A long article keeps the biggest section's subheadings, never a lone H3.
+    const long = compactOutline(outline, 2500);
+    expect(long.filter((x) => x.level === 3).map((x) => x.text)).toEqual(['a1', 'a2', 'a3', 'Q1?', 'Q2?']);
+    expect(long.find((x) => x.text === 'B')!.covers).toEqual(['b1']);
   });
 
   it('gives each FAQ question its own H3', () => {
@@ -74,7 +87,7 @@ describe('fact sheet', () => {
     const sheet = parseFactSheet(JSON.stringify({ facts: [{ label: 'Venue', value: 'X', status: 'confirmed', url: pages[0] }] }), pages, false);
     expect(sheet.facts[0]!.status).toBe('reported');
     const block = factSheetBlock(sheet, { today: '1 October 2026', year: '2026' } as never).join('\n');
-    expect(block).toMatch(/REPORTED by ranking pages only/);
+    expect(block).toMatch(/REPORTED by one ranking page only/);
     expect(block).toMatch(/Live search was unavailable/);
     expect(block).not.toMatch(/—/);
   });

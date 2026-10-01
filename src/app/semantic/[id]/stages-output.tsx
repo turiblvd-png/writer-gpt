@@ -296,6 +296,11 @@ export function MasterPromptStage({ api, onNavigate }: { api: StageApi; onNaviga
       return;
     }
     if (joined.project) setProject(joined.project);
+
+    setFlow({ label: 'Editing: contradictions, repeats and forced names', done: total, total, startedAt });
+    // The editor improves the article but must never stop it being finished.
+    const edited = await postAction(project.id, 'edit-article');
+    if (edited.ok && edited.project) setProject(edited.project);
     await finish(startedAt);
   }
 
@@ -470,6 +475,17 @@ export function ContentEditorStage({ api }: { api: StageApi }) {
           <ul className="space-y-1 text-xs">
             {article.unverifiedClaims.map((c) => <li key={c}>• {c}</li>)}
           </ul>
+        </Notice>
+      )}
+
+      {article.editorFixes && article.editorFixes.length > 0 && (
+        <Notice tone="info">
+          <details>
+            <summary className="cursor-pointer font-semibold">The final editor fixed {article.editorFixes.length} issue(s) across the article</summary>
+            <ul className="mt-1.5 space-y-1 text-xs">
+              {article.editorFixes.map((f, i) => <li key={i}>• {f}</li>)}
+            </ul>
+          </details>
         </Notice>
       )}
 

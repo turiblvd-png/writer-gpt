@@ -78,6 +78,7 @@ function run(id: string, action: string, body: Body) {
     case 'research-facts-live':  return A.researchFacts(id, { live: true });
     case 'write-part':           return A.writeArticlePart(id, String(body.runId ?? ''), Number(body.index ?? -1), body.planKey);
     case 'assemble-article':     return A.assembleArticle(id, String(body.runId ?? ''));
+    case 'edit-article':         return A.editArticle(id);
     case 'write-draft':          return A.writeDraft(id);
     case 'polish-article':       return A.polishArticle(id);
     case 'revise-article':       return A.reviseArticle(id);

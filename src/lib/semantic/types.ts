@@ -17,6 +17,8 @@ export interface CompetitorUrl {
 export interface OutlineHeading {
   level: number;
   text: string;
+  /** Subtopics folded into this section from subheadings the length cannot carry. */
+  covers?: string[];
 }
 
 export interface CompetitorOutline {
@@ -102,6 +104,8 @@ export interface ArticleOutput {
   quality?: QualityReport;
   /** Suggested alt text for the article's images. */
   altTexts?: string[];
+  /** What the final editor pass fixed: contradictions, repeats, forced names. */
+  editorFixes?: string[];
   /**
    * How far the article has got. Writing runs as separate requests (each well
    * inside the host's time limit) and each step saves, so a failure part-way

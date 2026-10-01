@@ -1,7 +1,8 @@
 import { analyseDocument, countWords, splitSentences } from '@/lib/seo/text';
 import { detectTells } from '@/lib/style/detect';
 import { EM_DASH } from '@/lib/style/patterns';
-import { keywordTargets, lengthBudget, splitKeywords, withFaqQuestions } from './brief';
+import { compactOutline, keywordTargets, lengthBudget, splitKeywords, withFaqQuestions } from './brief';
+import { STOP_WORDS } from './stopwords';
 import type { QualityCheck, QualityReport, SemanticProject } from './types';
 
 /**
@@ -72,15 +73,131 @@ export function splitLongParagraphs(markdown: string): string {
     .join('\n\n');
 }
 
+const MONTHS = 'January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec';
+const SPECIFIC = new RegExp(
+  [
+    `\\b(?:${MONTHS})\\.?\\s+\\d{1,2}(?:\\s*[-–]\\s*\\d{1,2})?\\b`,
+    `\\b\\d{1,2}(?:\\s*[-–]\\s*\\d{1,2})?\\s+(?:${MONTHS})\\b`,
+    '\\b\\d{1,2}(?::\\d{2})?\\s?(?:AM|PM|am|pm)\\b',
+    '\\b\\d[\\d,.]*\\s?(?:SAR|USD|EUR|GBP|AED|riyals?|dollars?|million|billion|%)',
+    '[$€£]\\s?\\d[\\d,.]*',
+    '\\b\\d{1,3}(?:,\\d{3})+\\b',
+  ].join('|'),
+  'g',
+);
+
+/**
+ * Specific figures (dates, times, prices, big numbers) stated more than
+ * `limit` times. Once in the key takeaways, once in its section and once in an
+ * FAQ answer is fine; more is the repetition readers notice.
+ */
+export function repeatedSpecifics(markdown: string, limit = 3): { text: string; count: number }[] {
+  const counts = new Map<string, { text: string; count: number }>();
+  for (const m of bodyText(markdown).match(SPECIFIC) ?? []) {
+    const key = m.toLowerCase().replace(/\s+/g, ' ').replace(/–/g, '-').trim();
+    const hit = counts.get(key) ?? { text: m.trim(), count: 0 };
+    hit.count++;
+    counts.set(key, hit);
+  }
+  return [...counts.values()].filter((c) => c.count > limit).sort((a, b) => b.count - a.count);
+}
+
+/** Headings with too little under them to deserve one; FAQ questions, Sources and H2s that lead into H3s are exempt. */
+export function thinSections(markdown: string, min = 45): string[] {
+  const lines = markdown.split('\n');
+  const out: string[] = [];
+  let inFaq = false;
+  lines.forEach((line, i) => {
+    const m = /^\s{0,3}(#{1,6})\s+(.+)$/.exec(line);
+    if (!m) return;
+    const level = m[1]!.length;
+    const text = m[2]!.trim();
+    if (level === 2) inFaq = /\b(faq|faqs|frequently asked|common questions|questions and answers)\b/i.test(text);
+    if (level === 1 || inFaq || /^(sources?|references|further reading)\b/i.test(text)) return;
+    let j = i + 1;
+    const body: string[] = [];
+    while (j < lines.length && !/^\s{0,3}#{1,6}\s/.test(lines[j]!)) body.push(lines[j++]!);
+    const nextLevel = /^\s{0,3}(#{1,6})\s/.exec(lines[j] ?? '')?.[1]?.length ?? 0;
+    if (nextLevel > level) return;
+    if (countWords(body.join(' ')) < min) out.push(text);
+  });
+  return out;
+}
+
+export interface TextEdit {
+  find: string;
+  replace: string;
+  why?: string;
+}
+
+/**
+ * Applies an editor's exact-text edits. An edit is skipped unless its text
+ * occurs in the article, stays inside one paragraph, and touches no heading,
+ * table row or link target, so a bad edit can never break the structure.
+ */
+export function applyEdits(markdown: string, edits: TextEdit[]): { markdown: string; applied: TextEdit[] } {
+  let out = markdown;
+  const applied: TextEdit[] = [];
+  for (const e of edits) {
+    const find = e.find ?? '';
+    const replace = (e.replace ?? '').replace(/\u2014/g, ', ');
+    if (find.trim().length < 12 || find.includes('\n\n') || /(^|\n)\s*(#|\|)/.test(find) || /(^|\n)\s*#/.test(replace)) continue;
+    if (/\]\(/.test(find) && !/\]\(/.test(replace)) continue;
+    const at = out.indexOf(find);
+    if (at === -1) continue;
+    out = out.slice(0, at) + replace + out.slice(at + find.length);
+    applied.push(e);
+  }
+  out = out
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/ +([,.;:!?])/g, '$1')
+    .replace(/\n[ \t]+\n/g, '\n\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  return { markdown: out, applied };
+}
+
 /** The article without its heading lines. */
 export function bodyText(markdown: string): string {
   return markdown.split('\n').filter((l) => !/^\s{0,3}#{1,6}\s/.test(l)).join('\n');
 }
 
+/**
+ * The outline the article is written to: FAQ questions as their own headings,
+ * then fitted to the length so no heading sits over a two-sentence fragment.
+ */
 export function plannedOutline(project: SemanticProject) {
   const d = project.data;
-  const questions = (d.selectedQuestions.length ? d.selectedQuestions : d.autoSuggest).slice(0, 8);
-  return d.seoRules.includeFaq ? withFaqQuestions(d.combinedOutline, questions) : d.combinedOutline;
+  const questions = (d.selectedQuestions.length ? d.selectedQuestions : d.autoSuggest).slice(0, 6);
+  const full = d.seoRules.includeFaq ? withFaqQuestions(d.combinedOutline, questions) : d.combinedOutline;
+  return compactOutline(full, d.wordCount.target);
+}
+
+/** Content words, for matching facts and entities to sections. */
+export function topicWords(text: string, ignore: Set<string> = new Set()): Set<string> {
+  return new Set(
+    (text.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) ?? []).filter((w) => !STOP_WORDS.has(w) && !ignore.has(w)),
+  );
+}
+
+/**
+ * Entities the article must name: two or more ranking pages name them AND the
+ * outline or the fact sheet connects them to this topic. A name that is only
+ * frequent on those pages (a celebrity at a neighbouring event, a sister
+ * tournament) is optional, so the writer never forces it into a section.
+ */
+export function requiredEntities(project: SemanticProject): string[] {
+  const d = project.data;
+  const keywordSet = new Set(splitKeywords(project.mainKeyword).map((k) => k.toLowerCase()));
+  const excluded = new Set(d.excludedEntities.map((e) => e.toLowerCase()));
+  const context = [
+    ...d.combinedOutline.map((h) => h.text),
+    ...(d.facts?.facts.flatMap((f) => [f.label, f.value]) ?? []),
+  ].join(' \n ').toLowerCase();
+  return d.entities
+    .filter((e) => (e.documentFrequency ?? 0) >= 2 && !excluded.has(e.name.toLowerCase()) && !keywordSet.has(e.name.toLowerCase()))
+    .map((e) => e.name.replace(/\s*\(.*\)$/, '').trim())
+    .filter((name) => name && context.includes(name.toLowerCase()));
 }
 
 export function assessArticle(project: SemanticProject, markdown: string, revised = false): QualityReport {
@@ -115,12 +232,8 @@ export function assessArticle(project: SemanticProject, markdown: string, revise
     detail: 'Main keyword in the first 100 words and a "Last updated" line under the H1.',
   });
 
-  const keywordSet = new Set(keywords.map((k) => k.toLowerCase()));
-  const excluded = new Set(project.data.excludedEntities.map((e) => e.toLowerCase()));
-  const required = project.data.entities.filter(
-    (e) => (e.documentFrequency ?? 0) >= 2 && !excluded.has(e.name.toLowerCase()) && !keywordSet.has(e.name.toLowerCase()),
-  );
-  const missingEntities = required.filter((e) => countPhrase(markdown, e.name.replace(/\s*\(.*\)$/, '')) === 0).map((e) => e.name);
+  const required = requiredEntities(project);
+  const missingEntities = required.filter((name) => countPhrase(markdown, name) === 0);
   checks.push({
     id: 'entities', label: 'Required entities', ok: missingEntities.length === 0,
     detail: missingEntities.length ? `Missing: ${missingEntities.join(', ')}.` : `All ${required.length} named.`,
@@ -133,6 +246,18 @@ export function assessArticle(project: SemanticProject, markdown: string, revise
   checks.push({
     id: 'headings', label: 'Outline followed', ok: missingHeadings.length === 0,
     detail: missingHeadings.length ? `Missing or reworded: ${missingHeadings.slice(0, 6).join(' | ')}${missingHeadings.length > 6 ? ` and ${missingHeadings.length - 6} more` : ''}.` : `All ${outline.length} headings present.`,
+  });
+
+  const repeats = repeatedSpecifics(markdown);
+  checks.push({
+    id: 'repeats', label: 'Each fact said once', ok: repeats.length === 0,
+    detail: repeats.length ? `Repeated: ${repeats.slice(0, 5).map((r) => `"${r.text}" ×${r.count}`).join(', ')}.` : 'No date, time, price or figure is repeated more than three times.',
+  });
+
+  const thin = thinSections(markdown);
+  checks.push({
+    id: 'sections', label: 'Sections earn their headings', ok: thin.length === 0,
+    detail: thin.length ? `${thin.length} heading(s) with under 45 words: ${thin.slice(0, 4).join(' | ')}${thin.length > 4 ? ' …' : ''}.` : 'Every heading has a real section under it.',
   });
 
   const long = longParagraphs(markdown);
@@ -165,6 +290,8 @@ export function revisionInstructions(report: QualityReport): string[] {
       if (c.id === 'headings') return `Headings: ${c.detail} Restore the exact headings from the structure, in order.`;
       if (c.id === 'paragraphs') return 'Paragraphs: split every paragraph over 3 sentences or 50 words.';
       if (c.id === 'opening') return 'Opening: put "Last updated" under the H1 and use the main keyword in the first 100 words.';
+      if (c.id === 'repeats') return `Repetition: ${c.detail} Keep each figure in its own section; elsewhere refer to it briefly.`;
+      if (c.id === 'sections') return `Thin sections: ${c.detail} Add the specifics a reader needs there.`;
       return `Style: remove ${c.detail}.`;
     });
 }

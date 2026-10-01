@@ -9,7 +9,7 @@ import { extractContent, extractOutline } from './extract';
 import { annotateEntities, extractNGrams, extractNlpKeywords, extractSkipGrams, type Doc } from './nlp';
 import { buildMegaPrompt } from './megaprompt';
 import { buildFactSheet, factSheetBlock } from './facts';
-import { assessArticle, plannedOutline, revisionInstructions, splitLongParagraphs } from './quality';
+import { applyEdits, assessArticle, plannedOutline, repeatedSpecifics, revisionInstructions, splitLongParagraphs, type TextEdit } from './quality';
 import { lengthBudget } from './brief';
 import { fixPartHeadings, planParts } from './sections';
 import { sanitizeDraft } from '@/lib/style/sanitize';
@@ -412,6 +412,52 @@ export async function assembleArticle(id: string, runId: string): Promise<Semant
     stage: 'revised',
   };
   return await save(id, { article, draft: undefined, megaPrompt: buildMegaPrompt(project, clock) });
+}
+
+/** Time the editor may take; it returns a short JSON list, so it is usually quick. */
+const EDIT_MS = 150_000;
+
+/**
+ * The final editor pass. Parts are written side by side, so only a reader of
+ * the whole article can catch two parts that disagree, a figure repeated in
+ * every section, or a name forced in where it does not belong. The model
+ * returns exact-text edits, applied only where they match and never across a
+ * heading or table, so the step is fast and cannot damage the article.
+ */
+export async function editArticle(id: string): Promise<SemanticProject> {
+  const project = await load(id);
+  const article = requireArticle(project);
+  const clock = makeClock();
+  const factText = project.data.facts ? factSheetBlock(project.data.facts, clock).join('\n') : '';
+  const res = await complete(
+    'structure',
+    {
+      prompt: P.editPrompt(article.markdown, factText, clock, repeatedSpecifics(article.markdown)),
+      json: true,
+      temperature: 0.1,
+      maxOutputTokens: 6000,
+      signal: AbortSignal.timeout(EDIT_MS),
+      fast: true,
+    },
+    { retries: 1, ...WRITER },
+  );
+  const parsed = extractJson<{ edits?: unknown }>(res.text);
+  const edits: TextEdit[] = (Array.isArray(parsed.edits) ? parsed.edits : [])
+    .filter((e): e is Record<string, unknown> => typeof e === 'object' && e !== null && typeof e.find === 'string')
+    .map((e) => ({ find: String(e.find), replace: typeof e.replace === 'string' ? e.replace : '', why: typeof e.why === 'string' ? e.why : undefined }))
+    .slice(0, 30);
+  const { markdown: edited, applied } = applyEdits(article.markdown, edits);
+  const markdown = splitLongParagraphs(sanitizeDraft(edited).text);
+  return await save(id, {
+    article: {
+      ...article,
+      markdown,
+      quality: assessArticle(project, markdown),
+      humanScore: detectTells(markdown).humanScore,
+      editorFixes: applied.map((e) => e.why || `Changed "${e.find.slice(0, 60)}"`),
+      stage: 'revised',
+    },
+  });
 }
 
 /** The article steps in order. The UI runs them one request at a time. */

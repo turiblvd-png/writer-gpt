@@ -22,9 +22,11 @@ describe('buildMegaPrompt', () => {
     expect(prompt).toContain('Your training data is older than that');
   });
 
-  it('splits entities into required and optional by competitor document frequency', () => {
+  it('requires an entity only when ranking pages name it and the topic connects to it', () => {
     const prompt = buildMegaPrompt(project({
+      combinedOutline: [{ level: 1, text: 'Six Kings Slam' }, { level: 2, text: 'Is it part of the ATP Tour?' }, { level: 2, text: 'Riyadh Season events' }],
       entities: [
+        { name: 'Kevin Hart', source: 'competitor', documentFrequency: 3 },
         { name: 'ATP Tour', source: 'competitor', documentFrequency: 3 },
         { name: 'Riyadh Season', source: 'competitor', documentFrequency: 2 },
         { name: 'GreenSet Worldwide', source: 'unique', documentFrequency: 0 },
@@ -35,6 +37,8 @@ describe('buildMegaPrompt', () => {
     expect(required).toContain('ATP Tour');
     expect(required).toContain('Riyadh Season');
     expect(required).not.toContain('GreenSet');
+    // Frequent on the pages but unconnected to the topic: never forced in.
+    expect(required).not.toContain('Kevin Hart');
     expect(prompt.slice(prompt.indexOf('OPTIONAL ('))).toContain('GreenSet Worldwide');
   });
 
@@ -73,7 +77,9 @@ describe('buildMegaPrompt', () => {
         { level: 1, text: 'Six Kings Slam 2026' },
         { level: 2, text: 'Dates and schedule' },
         { level: 3, text: 'Rest day' },
+        { level: 3, text: 'Session times' },
       ],
+      wordCount: { target: 3000, auto: false },
     }), clock);
     expect(prompt).toContain('# Six Kings Slam 2026');
     expect(prompt).toContain('## Dates and schedule');

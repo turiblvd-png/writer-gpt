@@ -12,7 +12,7 @@ const h = (level: number, text: string): OutlineHeading => ({ level, text });
 function bigProject(): SemanticProject {
   const outline: OutlineHeading[] = [h(1, 'Six Kings Slam 2026: Tickets, Dates and Format')];
   for (let i = 0; i < 11; i++) {
-    outline.push(h(2, i === 9 ? 'Frequently Asked Questions' : i === 10 ? 'Sources' : `Section ${i}`));
+    outline.push(h(2, i === 9 ? 'Frequently Asked Questions' : i === 10 ? 'Sources' : i === 2 ? 'Ticket prices' : `Section ${i}`));
     if (i < 10) for (let j = 0; j < (i < 6 ? 4 : 3); j++) outline.push(h(3, `Detail ${i}.${j}`));
   }
   return {
@@ -26,7 +26,16 @@ function bigProject(): SemanticProject {
         { name: 'ANB Arena', source: 'competitor', documentFrequency: 3 },
         { name: 'Riyadh Season', source: 'competitor', documentFrequency: 2 },
         { name: 'Webook', source: 'competitor', documentFrequency: 1 },
+        { name: 'Kevin Hart', source: 'competitor', documentFrequency: 3 },
       ],
+      facts: {
+        facts: [
+          { id: '1', label: 'Venue', value: 'ANB Arena, Riyadh', status: 'confirmed' },
+          { id: '2', label: 'Organiser', value: 'Riyadh Season', status: 'confirmed' },
+          { id: '3', label: 'Ticket prices', value: 'from 150 SAR', status: 'reported' },
+        ],
+        sources: [], liveSearch: false, researchedAt: 0,
+      },
     },
   };
 }
@@ -35,7 +44,7 @@ describe('parallel part plan', () => {
   const project = bigProject();
   const plan = planParts(project);
 
-  it('keeps every heading, once, in order', () => {
+  it('keeps every planned heading, once, in order', () => {
     expect(plan.parts.flatMap((p) => p.headings)).toEqual(plan.outline);
   });
 
@@ -58,9 +67,22 @@ describe('parallel part plan', () => {
     expect(plan.parts.at(-1)!.last).toBe(true);
   });
 
-  it('assigns each required entity to exactly one part, never optional ones', () => {
+  it('assigns each connected entity to exactly one part, never unconnected ones', () => {
     const all = plan.parts.flatMap((p) => p.entities);
     expect(all.sort()).toEqual(['ANB Arena', 'Riyadh Season']);
+  });
+
+  it('gives every fact exactly one home, matched to its section', () => {
+    expect(plan.parts.flatMap((p) => p.facts)).toHaveLength(3);
+    const home = plan.parts.find((p) => p.facts.some((f) => f.startsWith('Ticket prices')))!;
+    expect(home.headings.some((x) => x.text === 'Ticket prices')).toBe(true);
+  });
+
+  it('keeps no subheading over a fragment: at most one heading per ~220 words', () => {
+    const faq = plan.outline.findIndex((x) => x.text === 'Frequently Asked Questions');
+    const contentH3 = plan.outline.slice(0, faq).filter((x) => x.level === 3);
+    expect(contentH3).toHaveLength(0);
+    expect(plan.outline.find((x) => x.text === 'Section 0')!.covers).toHaveLength(4);
   });
 
   it('splits keyword ranges so the parts add up to the whole-article range', () => {
@@ -96,7 +118,7 @@ describe('parallel part plan', () => {
 });
 
 describe('part clean-up', () => {
-  const part = { index: 1, headings: [h(2, 'When Is It?'), h(3, 'Dates')], words: 200, opening: false, last: false, entities: [], keywords: [] };
+  const part = { index: 1, headings: [h(2, 'When Is It?'), h(3, 'Dates')], words: 200, opening: false, last: false, entities: [], facts: [], headingWords: [100, 100], keywords: [] };
 
   it('restores reworded headings and drops a preamble and stray H1', () => {
     const md = 'Here is your part:\n\n# Title again\n\n## When is it happening\n\nText.\n\n#### The dates\n\nMore.';

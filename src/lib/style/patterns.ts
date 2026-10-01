@@ -74,7 +74,7 @@ export const PHRASE_TELLS: TellPattern[] = [
  */
 export const EM_DASH = /—|(?<!\d\s?)–(?!\s?\d)/g;
 /** ASCII double hyphen used as an em dash. */
-export const DOUBLE_HYPHEN = /(?<=\S)\s*--\s*(?=\S)/g;
+export const DOUBLE_HYPHEN = /(?<=[\p{L}\p{N}.,!?)"'’])\s*(?<!-)--(?!-)\s*(?=[\p{L}\p{N}("'‘])/gu;
 
 /** Sentence openers that read as machine transitions when stacked. */
 export const TRANSITION_OPENERS = [

@@ -29,14 +29,15 @@ export function combineOutlinesPrompt(
     'Rules:',
     '- Drop site chrome that is not article content (navigation, "Related posts", newsletter prompts, cookie notices).',
     '- Merge headings that say the same thing in different words. Never keep two sections on the same subject (one accessibility section, one streaming section).',
-    `- Order sections by what a reader searching "${project.mainKeyword}" needs first, not by what competitors happen to do.`,
+    `- Order the H2s as the questions a reader searching "${project.mainKeyword}" asks, in the order they ask them (for an event: what and when, can I go, tickets, what it is like there, how to watch, background; for a product: is it good, who is it for, price, downsides, alternatives; for a how-to: short answer, what you need, steps, mistakes, fixes).`,
     '- Every H2 and H3 is a question a searcher asks or a concrete claim ("When Is X 2026?", "Ticket prices by category"). Never a vague label like "Overview", "Details" or "Tickets and entry".',
-    '- Use H3s to nest detail under H2s. A flat list of H2s is a failure, but so is an H2 with one H3.',
-    `- Size it for about ${project.data.wordCount.target} words: at most ${sizes.h2} H2s and ${sizes.h3} H3s in total. Merge or cut the least useful sections to stay within that.`,
+    '- Each topic has one home. Never put a subject under a heading where the reader is not thinking about it (no broadcasting inside the player section).',
+    '- Use an H3 only when its H2 section will run past about 250 words AND has clearly separate parts; then give it at least two. A section under 80 words does not get its own heading.',
+    `- Size it for about ${project.data.wordCount.target} words, about one heading per 200 to 300 words: at most ${sizes.h2} H2s and ${sizes.h3} H3s outside the FAQ. Merge or cut the least useful sections to stay within that.`,
     '- Add headings for subtopics the competitors miss but a reader would want. Mark those with "gap": true.',
     '- One H1 only, first. Use the main keyword once in it; do not repeat it.',
     '- Do not include a "Key takeaways" or "Introduction" heading; the article opens with those without a heading.',
-    '- Include an H2 for frequently asked questions near the end, with each question as its own H3.',
+    '- Include an H2 for frequently asked questions near the end, with up to 6 real search questions as their own H3s, ones the body does not already answer in full.',
     '- End with an H2 "Sources".',
     `- If the topic is time-bound, the structure must serve ${clock.year}, not a past edition.`,
     '',
@@ -127,6 +128,37 @@ export function verifyPrompt(markdown: string, facts: string, clock: RunClock): 
     '',
     'Return JSON only, listing ONLY claims that are not supported, contradicted ones first, at most 25:',
     '{ "claims": [ { "text": "", "verdict": "unsupported", "note": "" } ] }',
+  ].join('\n');
+}
+
+/**
+ * The final editor. It returns a few exact-text edits rather than a rewrite:
+ * small output, so it is fast, and nothing it does can break the structure.
+ */
+export function editPrompt(markdown: string, facts: string, clock: RunClock, repeats: { text: string; count: number }[]): string {
+  return [
+    `It is ${clock.today}. You are the final editor of the article below, written in parts by several writers. Return a short list of exact text edits; do not rewrite the article.`,
+    '',
+    facts ? `FACT SHEET (the truth for this article):\n${facts}\n` : 'FACT SHEET: (none)\n',
+    ...(repeats.length ? ['REPEATED FIGURES (measured):', ...repeats.map((r) => `- "${r.text}" appears ${r.count} times`), ''] : []),
+    'ARTICLE:',
+    markdown.slice(0, 40000),
+    '',
+    'Fix, in this order of importance:',
+    '1. Contradictions: two places that disagree (dates, times, prices, counts, who broadcasts it), or anything that contradicts the fact sheet. Keep what the fact sheet supports; if it supports neither, say plainly that it is not yet confirmed.',
+    '2. Wrong counts and superlatives (for example "four champions" when the sheet names three). Correct or remove.',
+    '3. Repetition: a figure or fact stated in full more than once outside the Key takeaways. Keep it in the section it belongs to; elsewhere cut it to a brief reference or delete the sentence.',
+    '4. Forced names: an entity mentioned where the reader of that section has no reason to meet it. Delete that clause.',
+    '5. Attribution overload: the same source named more than once in a section ("according to", "X lists"). Keep the first.',
+    '',
+    'Rules for each edit:',
+    '- "find" is copied character for character from the article, at least 12 characters, within one paragraph. Never a heading, a table row or a link.',
+    '- "replace" is the corrected text; "" deletes it. Keep the voice, no em dashes, no new facts.',
+    '- Make each "find" long enough to occur only once.',
+    '- At most 30 edits. Skip anything you are not sure is wrong.',
+    '',
+    'Return JSON only:',
+    '{ "edits": [ { "find": "", "replace": "", "why": "" } ] }',
   ].join('\n');
 }
 

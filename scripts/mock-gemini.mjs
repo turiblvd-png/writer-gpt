@@ -54,7 +54,8 @@ At ANB Arena in Riyadh, during Riyadh Season.`;
 
 /** One part of a parallel-written article: writes exactly the headings it was given. */
 function partAnswer(prompt) {
-  const block = /Write exactly these headings[^\n]*\n((?:#{1,6} .+\n?)+)/.exec(prompt)?.[1] ?? '';
+  // Headings follow the instruction line, each with an indented note under it.
+  const block = /Write exactly these headings[^\n]*\n([\s\S]*?)(?:\n\s*\n|$)/.exec(prompt)?.[1] ?? '';
   const headings = block.split('\n').filter((l) => /^#{1,6} /.test(l));
   return headings
     .map((h) => {

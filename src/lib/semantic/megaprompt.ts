@@ -1,7 +1,8 @@
 import type { RunClock } from '@/lib/pipeline/types';
 import { houseStyle } from '@/lib/style/rules';
 import type { SemanticProject } from './types';
-import { keywordTargets, lengthBudget, splitKeywords, usefulPairs, usefulPhrases, usefulTerms, withFaqQuestions } from './brief';
+import { keywordTargets, lengthBudget, splitKeywords, usefulPairs, usefulPhrases, usefulTerms } from './brief';
+import { plannedOutline, requiredEntities } from './quality';
 import { factSheetBlock } from './fact-block';
 import type { ArticlePart, PartPlan } from './sections';
 
@@ -55,8 +56,8 @@ export function buildMegaPrompt(
   const ngrams = usefulPhrases(data.ngrams.filter((g) => !excludedNgrams.has(lower(g.text))), year, maxNgrams);
   const terms = usefulTerms(data.nlpKeywords.filter((k) => !excludedKeywords.has(lower(k.term))), year, maxKeywords);
   const pairs = usefulPairs(data.skipGrams, year, maxSkipGrams);
-  const questions = (data.selectedQuestions.length ? data.selectedQuestions : data.autoSuggest).slice(0, 8);
-  const outline = data.seoRules.includeFaq ? withFaqQuestions(data.combinedOutline, questions) : data.combinedOutline;
+  const questions = (data.selectedQuestions.length ? data.selectedQuestions : data.autoSuggest).slice(0, 6);
+  const outline = plannedOutline(project);
   const budget = lengthBudget(outline, data.wordCount.target);
   const targets = keywordTargets(keywords, budget.effective);
   const facts = data.facts;
@@ -77,14 +78,14 @@ export function buildMegaPrompt(
       `Topic: ${primary}`,
       `Language: ${language}`,
       `The whole article is about ${budget.effective.toLocaleString()} words, written as ${opts.part!.plan.parts.length} parts at the same time by different writers from this same brief. You write one part; its headings, length and targets are under YOUR PART at the end.`,
-      `Section budget: about ${budget.perH2Intro} words directly under each H2, about ${budget.perH3} words under each H3. Depth comes from specifics, not length.`,
+      `Section budget: about ${budget.perSection} words for a section without subheadings, ${budget.perH3} under each H3, two sentences per FAQ answer. Depth comes from specifics, not length.`,
       `Today's date: ${clock.today}. The current year is ${clock.year}.`,
     ] : [
       `Topic: ${primary}`,
       `Language: ${language}`,
       `Target length: ${budget.effective.toLocaleString()} words${data.wordCount.competitorAverage ? ` (competitor average: ${data.wordCount.competitorAverage.toLocaleString()})` : ''}.` +
         (budget.raised ? ` Raised from ${budget.requested.toLocaleString()} because the outline has ${budget.h2} H2 and ${budget.h3} H3 sections.` : ''),
-      `Section budget: about ${budget.perH2Intro} words directly under each H2, about ${budget.perH3} words under each H3. Depth comes from specifics, not length.`,
+      `Section budget: about ${budget.perSection} words for a section without subheadings, ${budget.perH3} under each H3, two sentences per FAQ answer. Depth comes from specifics, not length.`,
       `Today's date: ${clock.today}. The current year is ${clock.year}.`,
     ]),
   );
@@ -104,7 +105,7 @@ export function buildMegaPrompt(
       `1. One H1, first. Use the main keyword once in it.`,
       `2. Directly under the H1: "Last updated: ${clock.today}".`,
       `3. Within the first 50 words, a one-sentence definition: "${primary} is ...". AI answers and featured snippets lift this line.`,
-      '4. A "Key takeaways" block of 5 short bullets (not a heading) that answers the main query: the most important confirmed facts.',
+      '4. A "Key takeaways" block of 5 short bullets (not a heading, each under 15 words) that answers the main query. No table in the opening.',
       ...(hasUnconfirmed ? ['5. A short "Confirmed vs not yet announced" list, so readers know what to trust.'] : []),
     ]),
   );
@@ -116,7 +117,10 @@ export function buildMegaPrompt(
         ...(data.seoRules.includeFaq && questions.length ? ['Each FAQ heading is a question: answer it in the first one or two sentences under it, then stop.'] : []),
         'The Sources section, if present, lists only the sources named under VERIFIED FACTS.',
         '',
-        ...outline.map((h) => `${'#'.repeat(Math.max(1, Math.min(6, h.level)))} ${h.text}`),
+        ...outline.flatMap((h) => [
+          `${'#'.repeat(Math.max(1, Math.min(6, h.level)))} ${h.text}`,
+          ...(h.covers?.length ? [`   (note, not a heading: cover in prose under this heading: ${h.covers.join('; ')})`] : []),
+        ]),
       ]),
     );
   }
@@ -134,8 +138,10 @@ export function buildMegaPrompt(
   if (entities.length && !part) {
     // Coverage targets come from competitor document frequency: an entity every
     // ranking page names is required; one only a single page names is optional.
-    const required = entities.filter((e) => (e.documentFrequency ?? 0) >= 2);
-    const optional = entities.filter((e) => (e.documentFrequency ?? 0) < 2);
+    const must = new Set(requiredEntities(project).map(lower));
+    const bare = (e: { name: string }) => lower(e.name.replace(/\s*\(.*\)$/, ''));
+    const required = entities.filter((e) => must.has(bare(e)));
+    const optional = entities.filter((e) => !must.has(bare(e)));
 
     sections.push(
       section('ENTITY COVERAGE', [
@@ -225,7 +231,9 @@ export function buildMegaPrompt(
       '- Where it applies, give local details: times with the time zone and a UTC or GMT conversion, prices in local currency with an approximate USD figure, entry or visa notes for visitors.',
       s.includeFaq ? '- The FAQ section answers the questions above, one question per heading.' : '',
       s.internalLinks ? `- Link naturally to these internal pages: ${s.internalLinks}` : '',
-      s.externalLinksPolicy === 'cite-sources' ? '- Name the source in the sentence for every statistic, price and quoted claim.' : '',
+      s.externalLinksPolicy === 'cite-sources' ? '- Name the source once per section for prices, statistics and disputed figures. Not in every sentence: repeated "according to" makes the text choppy.' : '',
+      '- Say each fact once, in the section it belongs to. Elsewhere refer to it briefly ("the October rest day") without restating the figures.',
+      '- Put an entity only in a section where the reader is thinking about it. Never mention a name just to include it.',
     ].filter(Boolean)),
   );
 
@@ -279,6 +287,7 @@ function partSections(
   const hasSources = part.headings.some((h) => SOURCES_HEADING.test(h.text.trim()));
   const others = ctx.entities.filter((e) => !part.entities.includes(e));
   const first = part.headings[0];
+  const elsewhere = plan.parts.filter((p) => p !== part).flatMap((p) => p.facts);
 
   const out: string[] = [];
   out.push(
@@ -286,6 +295,8 @@ function partSections(
       'Other writers cover the headings not marked as yours. Do not write about their subjects beyond a passing mention; repeating them makes the joined article repetitive.',
       '',
       ...plan.outline.map((h) => `${mark(h)}${mine.has(mark(h)) ? '   [YOUR PART]' : ''}`),
+      '',
+      'Whole-article rules: say each fact once, in its home section; never repeat a section that belongs to another writer.',
     ]),
   );
 
@@ -299,17 +310,29 @@ function partSections(
             '1. The H1 below, exactly as written.',
             `2. Directly under it: "Last updated: ${ctx.clock.today}".`,
             `3. Within the first 50 words, a one-sentence definition: "${ctx.primary} is ...".`,
-            '4. A "Key takeaways" block of 5 short bullets (not a heading) with the most important confirmed facts.',
+            '4. A "Key takeaways" block of 5 short bullets (not a heading, each under 15 words) with the most important confirmed facts. No table in the opening.',
             ...(ctx.hasUnconfirmed ? ['5. A short "Confirmed vs not yet announced" list, so readers know what to trust.'] : []),
             'Then continue with the rest of your headings.',
           ]
         : ['This part sits in the middle or end of the article. No introduction, no definition, no key takeaways and no summary of the whole article: start directly with your first heading.']),
       ...(part.last && !hasSources ? ['Your part ends the article. Close the final section with a practical next step for the reader, not a recap.'] : []),
       '',
-      'Write exactly these headings, with these levels and this exact wording, in this order, and no others:',
-      ...part.headings.map(mark),
-      ...(hasFaq ? ['', 'Each FAQ heading is a question: answer it in the first one or two sentences under it, then stop.'] : []),
-      ...(hasSources ? ['', 'The Sources section lists only the sources named under VERIFIED FACTS, with their URL where given.'] : []),
+      'Write exactly these headings, with these levels and this exact wording, in this order, and no others. The indented notes are guidance for you, not text or headings:',
+      ...part.headings.flatMap((h, i) => [
+        mark(h),
+        `   (about ${part.headingWords[i] ?? 0} words${h.covers?.length ? `; cover in prose, without extra headings, whichever of these a reader needs: ${h.covers.join('; ')}` : ''})`,
+      ]),
+      ...(hasFaq ? ['', 'FAQ: answer each question in one or two sentences, then stop. Give the direct answer only; do not repeat details the body already explains.'] : []),
+      ...(hasSources ? ['', 'Sources: list only the sources named under VERIFIED FACTS, with their URL where given, each described by what it is (organiser, ticket platform, broadcaster, third-party guide, encyclopedia, news outlet). Never call a third-party site official.'] : []),
+      ...(part.facts.length || elsewhere.length ? [''] : []),
+      ...(part.facts.length
+        ? ['YOUR FACTS. These belong in your sections: state them in full here, once each.', ...part.facts.map((f) => `- ${f}`)]
+        : []),
+      ...(elsewhere.length
+        ? ['', 'Every other fact on the sheet has its home in another part. Do not restate those figures (dates, prices, times, capacities). If your text needs one, refer to it briefly ("the October dates", "see tickets above") without the number. The opening\'s key takeaways are the only exception.']
+        : []),
+      '',
+      'Use a table only where readers compare several items across the same attributes, and never for facts another part already states.',
     ]),
   );
 
@@ -327,10 +350,10 @@ function partSections(
   out.push(
     section('YOUR ENTITIES', [
       ...(part.entities.length
-        ? ['Name each of these in your part, with its canonical name, and state how it relates to the topic using only the fact sheet:', ...part.entities.map((e) => `- ${e}`)]
+        ? ['Name each of these where it fits your headings, with its canonical name, and state how it relates to the topic using only the fact sheet:', ...part.entities.map((e) => `- ${e}`)]
         : ['No entity is assigned to your part.']),
       ...(others.length
-        ? ['', 'Other entities from the brief. Name one only where it genuinely belongs under your headings:', others.join(', ')]
+        ? ['', 'Other entities from the brief. Name one only if the reader of THIS section needs it; skip the rest. A name dropped in where it does not belong hurts the article:', others.join(', ')]
         : []),
     ]),
   );
@@ -342,6 +365,8 @@ function partSections(
       '- No banned word or pattern from the lists above.',
       '- Every specific traces to the VERIFIED FACTS; nothing is invented.',
       '- Every one of your headings is present, in order, worded exactly as given, and no other heading.',
+      '- No figure from another part\'s facts is restated, and none of your facts is stated twice.',
+      '- No two numbers in your part disagree (times, dates, prices, counts).',
     ]),
   );
 
