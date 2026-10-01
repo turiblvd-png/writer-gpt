@@ -51,6 +51,14 @@ export function SubscribersWorkspace({
     setRows((list) => list.filter((r) => r.id !== row.id));
   }
 
+  async function resetPassword(row: SubscriberRow) {
+    if (!window.confirm(`Set a new temporary password for ${row.email}?`)) return;
+    const res = await fetch(`/api/admin/users/${row.id}/password`, { method: 'POST' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return setError(data.error ?? 'Could not reset.');
+    window.prompt(`Temporary password for ${row.email}. Copy it and send it to them; they can change it under Account.`, data.password);
+  }
+
   async function toggleSignups(open: boolean) {
     setSignupsOpen(open);
     await fetch('/api/admin/platform', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ signupsOpen: open }) });
@@ -80,7 +88,7 @@ export function SubscribersWorkspace({
       {error && <Notice tone="bad">{error}</Notice>}
 
       <div className="card overflow-x-auto">
-        <table className="w-full min-w-[860px] text-sm">
+        <table className="w-full min-w-[960px] text-sm">
           <thead className="border-b border-line text-left text-[11px] uppercase tracking-wider text-ink-3">
             <tr>
               <th className="p-3">Person</th><th className="p-3">Plan</th><th className="p-3">Role</th><th className="p-3">Status</th>
@@ -128,9 +136,14 @@ export function SubscribersWorkspace({
                   <td className="p-3 text-right font-mono">${r.usage.costUsd.toFixed(3)}</td>
                   <td className="p-3 text-right">
                     {!isOwner && !self && (
-                      <button className="rounded-lg p-1.5 text-ink-3 hover:text-bad" onClick={() => void remove(r)} aria-label={`Delete ${r.email}`}>
-                        <IconTrash className="h-4 w-4" />
-                      </button>
+                      <span className="inline-flex items-center gap-1">
+                        <button className="rounded-lg px-2 py-1 text-xs text-ink-3 hover:bg-surface-2 hover:text-ink" onClick={() => void resetPassword(r)}>
+                          Reset password
+                        </button>
+                        <button className="rounded-lg p-1.5 text-ink-3 hover:text-bad" onClick={() => void remove(r)} aria-label={`Delete ${r.email}`}>
+                          <IconTrash className="h-4 w-4" />
+                        </button>
+                      </span>
                     )}
                   </td>
                 </tr>

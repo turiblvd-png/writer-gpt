@@ -14,7 +14,7 @@ export async function POST(request: Request) {
   }
   const body = await request.json().catch(() => null);
   const email = typeof body?.email === 'string' ? body.email : '';
-  const settings = await getPlatformSettings();
+  const settings = await getPlatformSettings().catch(() => ({ signupsOpen: true }));
   if (!settings.signupsOpen && email.trim().toLowerCase() !== ownerEmail()) {
     return NextResponse.json({ error: 'Sign-ups are closed right now.' }, { status: 403 });
   }
@@ -28,6 +28,10 @@ export async function POST(request: Request) {
     return withSession(NextResponse.json({ ok: true, user }), user);
   } catch (err) {
     if (err instanceof AuthError) return NextResponse.json({ error: err.message }, { status: err.status });
-    throw err;
+    console.error('[auth] sign-up failed', err);
+    return NextResponse.json(
+      { error: `Sign-up failed on the server: ${err instanceof Error ? err.message : String(err)}. Check that the database is connected (Vercel → Storage).` },
+      { status: 500 },
+    );
   }
 }

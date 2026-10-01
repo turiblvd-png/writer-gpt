@@ -26,8 +26,8 @@ describe('accounts', () => {
     await expect(signUp({ email: 'READER@example.com', password: 'longenough' })).rejects.toThrow(/already exists/);
     await expect(signUp({ email: 'x@example.com', password: 'short' })).rejects.toThrow(/8 characters/);
     expect((await signIn('reader@example.com', 'longenough')).id).toBe(u.id);
-    await expect(signIn('reader@example.com', 'wrong-password')).rejects.toThrow(/Wrong email or password/);
-    await expect(signIn('nobody@example.com', 'longenough')).rejects.toThrow(/Wrong email or password/);
+    await expect(signIn('reader@example.com', 'wrong-password')).rejects.toThrow(/Wrong password/);
+    await expect(signIn('nobody@example.com', 'longenough')).rejects.toThrow(/No account with this email/);
   });
 
   it('suspends subscribers but never the developer', async () => {
@@ -64,5 +64,36 @@ describe('private data', () => {
 
     expect((await runAs(owner, () => notes.all())).map((n) => n.id)).toEqual(['legacy']);
     expect(await runAs(null, () => notes.all())).toHaveLength(3);
+  });
+});
+
+describe('never locked out', () => {
+  it('lets the developer in with the setup code, creating the account if needed', async () => {
+    const { signIn } = await import('./users');
+    const first = await signIn('turi.ishtiaq@gmail.com', 'setup-code-123');
+    expect(first.role).toBe('owner');
+    const again = await signIn('Turi.Ishtiaq@gmail.com', 'setup-code-123');
+    expect(again.id).toBe(first.id);
+    await expect(signIn('someone@else.com', 'setup-code-123')).rejects.toThrow(/No account/);
+  });
+
+  it('explains a missing account and a wrong password differently', async () => {
+    const { signUp, signIn } = await import('./users');
+    await expect(signIn('turi.ishtiaq@gmail.com', 'whatever-1')).rejects.toThrow(/No developer account yet/);
+    await signUp({ email: 'reader@example.com', password: 'longenough' });
+    await expect(signIn('reader@example.com', 'nope-nope-1')).rejects.toThrow(/Wrong password/);
+  });
+
+  it('recovers the developer password with the setup code only', async () => {
+    const { signUp, signIn, resetOwnerPassword, resetPasswordByAdmin } = await import('./users');
+    await signUp({ email: 'turi.ishtiaq@gmail.com', password: 'forgotten-1', setupCode: 'setup-code-123' });
+    await expect(resetOwnerPassword('turi.ishtiaq@gmail.com', 'wrong', 'brand-new-1')).rejects.toThrow(/setup code/);
+    await expect(resetOwnerPassword('reader@example.com', 'setup-code-123', 'brand-new-1')).rejects.toThrow(/Only the developer/);
+    await resetOwnerPassword('turi.ishtiaq@gmail.com', 'setup-code-123', 'brand-new-1');
+    expect((await signIn('turi.ishtiaq@gmail.com', 'brand-new-1')).role).toBe('owner');
+
+    const u = await signUp({ email: 'reader@example.com', password: 'longenough' });
+    const temp = await resetPasswordByAdmin(u.id);
+    expect((await signIn('reader@example.com', temp)).id).toBe(u.id);
   });
 });

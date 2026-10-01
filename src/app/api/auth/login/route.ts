@@ -11,6 +11,7 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
   const email = typeof body?.email === 'string' ? body.email : '';
   const password = typeof body?.password === 'string' ? body.password : '';
+  if (!email.trim() || !password) return NextResponse.json({ error: 'Enter your email and password.' }, { status: 400 });
   try {
     const user = await signIn(email, password);
     return withSession(NextResponse.json({ ok: true, user }), user);
@@ -20,6 +21,10 @@ export async function POST(request: Request) {
       if (err.status === 401) await new Promise((r) => setTimeout(r, 600));
       return NextResponse.json({ error: err.message }, { status: err.status });
     }
-    throw err;
+    console.error('[auth] sign-in failed', err);
+    return NextResponse.json(
+      { error: `Sign-in failed on the server: ${err instanceof Error ? err.message : String(err)}. Check that the database is connected (Vercel → Storage).` },
+      { status: 500 },
+    );
   }
 }

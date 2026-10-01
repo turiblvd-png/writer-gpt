@@ -77,8 +77,7 @@ export async function signUp(input: { email: string; password: string; name?: st
 
   const isOwner = email === ownerEmail();
   if (isOwner) {
-    const code = process.env.APP_PASSWORD ?? process.env.AUTH_SECRET ?? '';
-    if (!code || !safeEqual(input.setupCode ?? '', code)) {
+    if (!isSetupCode(input.setupCode ?? '')) {
       throw new AuthError('This is the developer account. Enter the setup code (your APP_PASSWORD) to create it.', 403);
     }
   }
@@ -99,14 +98,66 @@ export async function signUp(input: { email: string; password: string; name?: st
   return toPublic(record);
 }
 
+function setupCode(): string {
+  return process.env.APP_PASSWORD ?? process.env.AUTH_SECRET ?? '';
+}
+
+/** True when the given text is the site's setup code (APP_PASSWORD). */
+export function isSetupCode(text: string): boolean {
+  const code = setupCode();
+  return Boolean(code) && safeEqual(text, code);
+}
+
 export async function signIn(email: string, password: string): Promise<PublicUser> {
-  const user = await findByEmail(email);
-  // Hash anyway on a miss, so timing does not reveal which emails exist.
-  const ok = user ? await checkPassword(password, user.passwordHash) : (await hashPassword(password), false);
-  if (!user || !ok) throw new AuthError('Wrong email or password.', 401);
+  const target = normaliseEmail(email);
+  const user = await findByEmail(target);
+
+  // The developer can never be locked out: the setup code (APP_PASSWORD) is a
+  // master key for the owner email. It signs in, and creates the account if
+  // it does not exist yet. Whoever holds it controls the site anyway.
+  if (target === ownerEmail() && isSetupCode(password)) {
+    if (!user) return signUp({ email: target, password, name: 'Developer', setupCode: password });
+    if (user.role !== 'owner') await users.mutate(user.id, (u) => ({ ...u, role: 'owner', status: 'active' }));
+    await users.mutate(user.id, (u) => ({ ...u, lastSeenAt: Date.now() }));
+    return toPublic({ ...user, role: 'owner', status: 'active' });
+  }
+
+  if (!user) {
+    throw new AuthError(
+      target === ownerEmail()
+        ? 'No developer account yet. Click "Create an account", or sign in with your setup code (APP_PASSWORD) as the password.'
+        : 'No account with this email yet. Click "Create an account" below.',
+      404,
+    );
+  }
+  if (!(await checkPassword(password, user.passwordHash))) throw new AuthError('Wrong password for this email.', 401);
   if (user.status === 'suspended') throw new AuthError('This account is suspended. Contact the site owner.', 403);
   await users.mutate(user.id, (u) => ({ ...u, lastSeenAt: Date.now() }));
   return toPublic(user);
+}
+
+/** Developer password recovery: the setup code proves who is asking. */
+export async function resetOwnerPassword(email: string, code: string, next: string): Promise<PublicUser> {
+  const target = normaliseEmail(email);
+  if (target !== ownerEmail()) throw new AuthError('Only the developer account can be recovered here. Subscribers: ask the site owner to reset your password.', 403);
+  if (!isSetupCode(code)) throw new AuthError('That setup code is not right. It is the APP_PASSWORD value in your Vercel settings.', 403);
+  if (next.length < 8) throw new AuthError('Use a password of at least 8 characters.');
+  const user = await findByEmail(target);
+  if (!user) return signUp({ email: target, password: next, name: 'Developer', setupCode: code });
+  const hash = await hashPassword(next);
+  const updated = await users.mutate(user.id, (u) => ({ ...u, passwordHash: hash, role: 'owner', status: 'active' }));
+  return toPublic(updated!);
+}
+
+/** An admin sets a temporary password for a subscriber, shown to the admin once. */
+export async function resetPasswordByAdmin(id: string): Promise<string> {
+  const user = await users.get(id);
+  if (!user) throw new AuthError('User not found.', 404);
+  if (user.role === 'owner') throw new AuthError('The developer resets their own password from the sign-in page.');
+  const temp = randomBytes(9).toString('base64url');
+  const hash = await hashPassword(temp);
+  await users.mutate(id, (u) => ({ ...u, passwordHash: hash }));
+  return temp;
 }
 
 export async function getUser(id: string): Promise<PublicUser | null> {
