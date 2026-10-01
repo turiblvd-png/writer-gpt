@@ -14,7 +14,22 @@ const ASYNC_STORE = [
   'saveHumanized', 'listHumanized', 'getHumanized', 'deleteHumanized',
   'listBrandVoices', 'createBrandVoice', 'getBrandVoice', 'deleteBrandVoice', 'seedDefaultVoices',
   'saveRewritten', 'listRewritten', 'deleteRewritten', 'storageStatus', 'probeStorage', 'safeRead',
+  'listAudits', 'getAudit', 'listChecks', 'listResearch', 'deleteResearch',
+  'enqueue', 'claimNext', 'runNext', 'listQueue', 'retryItem', 'clearFinished',
+  'sendMessage', 'listConversations', 'getConversation', 'deleteConversation',
+  'generateSocialPosts', 'listSocialSets', 'deleteSocialSet',
+  'addEntry', 'updateEntry', 'removeEntry', 'listEntries',
+  'getWpConfig', 'getWpConfigView', 'saveWpConfig', 'disconnectWp', 'publishArticle', 'loadReport',
 ];
+
+/** True when line i sits inside an awaited Promise.all([...]) array. */
+function insideAwaitedAll(lines: string[], i: number): boolean {
+  for (let j = i - 1; j >= Math.max(0, i - 20); j--) {
+    if (/\]\s*\)/.test(lines[j]!)) return false;
+    if (/\bawait\s+Promise\.all\(\[\s*$/.test(lines[j]!)) return true;
+  }
+  return false;
+}
 
 function walk(dir: string): string[] {
   return readdirSync(dir).flatMap((e) => {
@@ -30,7 +45,8 @@ describe('async storage calls', () => {
     const offenders: string[] = [];
 
     for (const file of walk('src')) {
-      readFileSync(file, 'utf8').split('\n').forEach((line, i) => {
+      const lines = readFileSync(file, 'utf8').split('\n');
+      lines.forEach((line, i) => {
         const m = call.exec(line);
         if (!m) return;
         const before = line.slice(0, m.index);
@@ -40,7 +56,10 @@ describe('async storage calls', () => {
           /\bfunction\s+$/.test(before) ||
           /\bimport\b|\bexport\s*\{/.test(line) ||
           /^\s*(\*|\/\/)/.test(line) ||
-          /void\s+$/.test(before);
+          /void\s+$/.test(before) ||
+          // A method on some other object (e.g. a stream controller), not our store.
+          /\.\s*$/.test(before) ||
+          (/^\s*$/.test(before) && insideAwaitedAll(lines, i));
         if (!ok) offenders.push(`${file}:${i + 1}  ${line.trim().slice(0, 100)}`);
       });
     }

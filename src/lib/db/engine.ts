@@ -174,6 +174,31 @@ class JsonDriver implements Driver {
 
 type PgPool = import('pg').Pool;
 
+/**
+ * Errors that mean the connection died, not that the query was wrong. Neon and
+ * other serverless Postgres close idle connections when they scale to zero, so
+ * the first query after a quiet spell can land on a dead socket.
+ */
+const CONNECTION_LOST = /Connection terminated|ECONNRESET|EPIPE|terminating connection|connection error|Client was closed|timeout exceeded when trying to connect/i;
+
+export function isConnectionLost(err: unknown): boolean {
+  return CONNECTION_LOST.test(message(err));
+}
+
+/**
+ * Run once more on a fresh connection if the first one was dead. Safe because
+ * every operation here is idempotent (upserts, deletes by key, reads) or runs
+ * in a transaction the server rolls back when the connection drops.
+ */
+async function retryOnce<T>(op: () => Promise<T>): Promise<T> {
+  try {
+    return await op();
+  } catch (err) {
+    if (!isConnectionLost(err)) throw err;
+    return op();
+  }
+}
+
 class PostgresDriver implements Driver {
   private pool: PgPool | null = null;
   private ready: Promise<void> | null = null;
@@ -221,41 +246,54 @@ class PostgresDriver implements Driver {
   }
 
   async get(c: string, id: string) {
-    const db = await this.db();
-    const { rows } = await db.query('SELECT data FROM documents WHERE collection = $1 AND id = $2', [c, id]);
-    return (rows[0]?.data as Row) ?? null;
+    return retryOnce(async () => {
+      const db = await this.db();
+      const { rows } = await db.query('SELECT data FROM documents WHERE collection = $1 AND id = $2', [c, id]);
+      return (rows[0]?.data as Row) ?? null;
+    });
   }
 
   async all(c: string) {
-    const db = await this.db();
-    const { rows } = await db.query('SELECT data FROM documents WHERE collection = $1', [c]);
-    return rows.map((r) => r.data as Row);
+    return retryOnce(async () => {
+      const db = await this.db();
+      const { rows } = await db.query('SELECT data FROM documents WHERE collection = $1', [c]);
+      return rows.map((r) => r.data as Row);
+    });
   }
 
   async list(c: string, sortBy: string, limit: number) {
-    const db = await this.db();
-    // sortBy is always a field name chosen in code, but pass it as a parameter
-    // anyway so no caller can ever turn it into an injection.
-    const { rows } = await db.query(
-      `SELECT data FROM documents WHERE collection = $1
-       ORDER BY COALESCE((data->>$2)::numeric, 0) DESC LIMIT $3`,
-      [c, sortBy, Math.max(0, limit)],
-    );
-    return rows.map((r) => r.data as Row);
+    return retryOnce(async () => {
+      const db = await this.db();
+      // sortBy is always a field name chosen in code, but pass it as a parameter
+      // anyway so no caller can ever turn it into an injection.
+      const { rows } = await db.query(
+        `SELECT data FROM documents WHERE collection = $1
+         ORDER BY COALESCE((data->>$2)::numeric, 0) DESC LIMIT $3`,
+        [c, sortBy, Math.max(0, limit)],
+      );
+      return rows.map((r) => r.data as Row);
+    });
   }
 
   async put(c: string, row: Row) {
-    const db = await this.db();
-    await db.query(
-      `INSERT INTO documents (collection, id, data, updated_at) VALUES ($1, $2, $3, $4)
-       ON CONFLICT (collection, id) DO UPDATE SET data = EXCLUDED.data, updated_at = EXCLUDED.updated_at`,
-      [c, row.id, JSON.stringify(row), Date.now()],
-    );
+    return retryOnce(async () => {
+      const db = await this.db();
+      await db.query(
+        `INSERT INTO documents (collection, id, data, updated_at) VALUES ($1, $2, $3, $4)
+         ON CONFLICT (collection, id) DO UPDATE SET data = EXCLUDED.data, updated_at = EXCLUDED.updated_at`,
+        [c, row.id, JSON.stringify(row), Date.now()],
+      );
+    });
   }
 
   async mutate(c: string, id: string, change: (r: Row) => Row) {
+    return retryOnce(() => this.mutateOnce(c, id, change));
+  }
+
+  private async mutateOnce(c: string, id: string, change: (r: Row) => Row) {
     const db = await this.db();
     const client = await db.connect();
+    let broken: Error | undefined;
     try {
       // Row lock, so two stage actions on one project cannot overwrite each other.
       await client.query('BEGIN');
@@ -274,16 +312,20 @@ class PostgresDriver implements Driver {
       await client.query('COMMIT');
       return next;
     } catch (err) {
-      await client.query('ROLLBACK').catch(() => {});
+      if (isConnectionLost(err)) broken = err as Error;
+      else await client.query('ROLLBACK').catch(() => {});
       throw err;
     } finally {
-      client.release();
+      // Passing the error makes the pool discard the dead client instead of reusing it.
+      client.release(broken);
     }
   }
 
   async remove(c: string, id: string) {
-    const db = await this.db();
-    await db.query('DELETE FROM documents WHERE collection = $1 AND id = $2', [c, id]);
+    return retryOnce(async () => {
+      const db = await this.db();
+      await db.query('DELETE FROM documents WHERE collection = $1 AND id = $2', [c, id]);
+    });
   }
 
   async status(): Promise<StorageStatus> {

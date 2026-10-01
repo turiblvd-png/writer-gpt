@@ -246,3 +246,14 @@ describe('safeRead', () => {
     expect(await safeRead(async () => [2], [], 't')).toEqual([2]);
   });
 });
+
+describe('postgres connection loss', () => {
+  it('recognises dropped connections but not query errors', async () => {
+    const { isConnectionLost } = await import('./engine');
+    expect(isConnectionLost(new Error('Connection terminated unexpectedly'))).toBe(true);
+    expect(isConnectionLost(new Error('read ECONNRESET'))).toBe(true);
+    expect(isConnectionLost(new Error('terminating connection due to administrator command'))).toBe(true);
+    expect(isConnectionLost(new Error('syntax error at or near "SELEC"'))).toBe(false);
+    expect(isConnectionLost(new Error('duplicate key value violates unique constraint'))).toBe(false);
+  });
+});

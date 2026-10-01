@@ -26,6 +26,17 @@ export function KeywordWorkspace({ initialHistory }: { initialHistory: KeywordRe
   const [history, setHistory] = useState(initialHistory);
   const [intentFilter, setIntentFilter] = useState<Intent | 'all'>('all');
   const [copied, setCopied] = useState(false);
+  const [queued, setQueued] = useState<string | null>(null);
+
+  async function queueAll(terms: string[]) {
+    setQueued('Adding…');
+    const res = await fetch('/api/autopilot', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ keywords: terms, language }),
+    });
+    const data = await res.json().catch(() => ({}));
+    setQueued(res.ok ? `${data.added.length} added to Autopilot` : data.error ?? 'Could not queue.');
+  }
 
   async function run() {
     setBusy(true);
@@ -94,6 +105,14 @@ export function KeywordWorkspace({ initialHistory }: { initialHistory: KeywordRe
             >
               {copied ? <><IconCheck className="h-3.5 w-3.5" /> Copied</> : <><IconCopy className="h-3.5 w-3.5" /> Copy all {allTerms.length}</>}
             </button>
+          </div>
+
+          <div className="mb-4 flex flex-wrap items-center gap-3">
+            <button className="btn-ghost px-3 py-1.5 text-xs" disabled={queued === 'Adding…'}
+                    onClick={() => void queueAll(current.clusters.flatMap((c) => c.keywords).filter((k) => intentFilter === 'all' || k.intent === intentFilter).map((k) => k.term))}>
+              Queue {intentFilter === 'all' ? 'all' : intentFilter} in Autopilot
+            </button>
+            {queued && <span className="text-xs text-ink-3">{queued}{queued.includes('added') && <> · <Link href="/autopilot" className="text-accent underline">open Autopilot</Link></>}</span>}
           </div>
 
           {current.angle && <Notice tone="info"><strong className="text-ink">Winning angle:</strong> {current.angle}</Notice>}

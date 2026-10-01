@@ -139,3 +139,16 @@ export function configuredProviders(): Record<ProviderId, boolean> {
     grok: Boolean(process.env.XAI_API_KEY),
   };
 }
+
+/** The model each role uses, for the Account page. Malformed overrides are reported, not thrown. */
+export function roleBindings(): { role: ModelRole; binding: string; overridden: boolean; error?: string }[] {
+  return (Object.keys(DEFAULT_BINDINGS) as ModelRole[]).map((role) => {
+    const overridden = Boolean(process.env[ENV_BY_ROLE[role]]);
+    try {
+      const b = resolveBinding(role);
+      return { role, binding: `${b.provider}:${b.model}`, overridden };
+    } catch (err) {
+      return { role, binding: process.env[ENV_BY_ROLE[role]] ?? '', overridden, error: err instanceof Error ? err.message : String(err) };
+    }
+  });
+}

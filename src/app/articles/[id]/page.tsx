@@ -37,6 +37,16 @@ export default async function ArticlePage({ params }: { params: Promise<{ id: st
           <span>•</span>
           <span>{new Date(article.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
         </p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Link href="/publishing" className="btn-primary px-3 py-1.5 text-sm">
+            {article.wpPostId ? 'Update on WordPress' : 'Publish to WordPress'}
+          </Link>
+          <Link href={`/social?article=${article.id}`} className="btn-ghost px-3 py-1.5 text-sm">Social posts</Link>
+          <Link href="/calendar" className="btn-ghost px-3 py-1.5 text-sm">Schedule in calendar</Link>
+          {article.publishedUrl && (
+            <a href={article.publishedUrl} target="_blank" rel="noreferrer noopener" className="btn-ghost px-3 py-1.5 text-sm">View live post</a>
+          )}
+        </div>
       </div>
 
       <ArticleTabs

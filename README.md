@@ -1,13 +1,23 @@
 # Writer-GPT
 
-AI SEO content engine. Four tools on one research-grounded pipeline.
+AI SEO content engine: research-grounded writing, SEO tooling and publishing
+in one workspace.
 
-| Tool | Status |
-| --- | --- |
-| **Generate Content** | Working — 6-step grounded pipeline |
-| **Semantic Writer** | Working — 14-stage workspace |
-| **Humanizer** | Working, 3 stealth modes |
-| **Rewrite from URL** | Working, fact-preserving |
+| Section | Tool | What it does |
+| --- | --- | --- |
+| Create | **Generate Content** | 6-step grounded pipeline: research, intent, outline, draft, metadata, fact check |
+| Create | **Semantic Writer** | 14-stage entity-first workspace |
+| Create | **Humanizer** | Scores AI tells and rewrites until the text reads human, 3 modes |
+| Create | **Rewrite from URL** | Keeps a page's facts, rewrites it in your voice, measures originality |
+| AI | **Autopilot** | Keyword queue written one article per tick (button, open tab, or daily cron) |
+| AI | **SEO Copilot** | Chat with an SEO strategist that searches before answering, with sources |
+| AI | **AI Visibility** | Checks whether AI answers cite your domain for your queries |
+| AI | **Keyword Research** | Clusters, intent, questions and difficulty from the live results page |
+| AI | **Content Audit** | Scores any URL or draft for on-page SEO and AI writing patterns |
+| AI | **Reports** | Output, quality scores, weekly volume and citation trends |
+| Library | **My Articles / Social Media Posts / Content Calendar** | Library, platform-native posts, and planning |
+| Publishing | **WordPress** | Draft, publish or schedule via Application Password; re-publish updates the same post |
+| Account | **Account & Setup** | Checklist of what is configured and how to fix what is not |
 
 The marketing site lives in [`marketing/`](./marketing) and is served separately.
 
@@ -40,11 +50,18 @@ node scripts/seed-semantic.mjs   # Semantic Writer project with a real corpus
 
 ### Deploying to Vercel
 
-Two settings, both in the Vercel dashboard:
+Settings in the Vercel dashboard:
 
 1. **Database.** Storage → Create Database → **Neon** (serverless Postgres) →
    connect it to this project. That sets `DATABASE_URL` automatically.
 2. **API key.** Settings → Environment Variables → `GEMINI_API_KEY`.
+3. **Password.** Same place → `APP_PASSWORD`. Without it anyone with the URL
+   can use your quota and publish to your WordPress site.
+4. **Optional.** `CRON_SECRET` turns on the daily Autopilot run (`vercel.json`);
+   `WP_URL`, `WP_USERNAME`, `WP_APP_PASSWORD` connect WordPress without storing
+   the password in the database.
+
+The **Account & Setup** page shows which of these are in place.
 
 Then deploy the latest commit (Deployments → the newest build; "Redeploy" on
 an old build reuses that old commit).

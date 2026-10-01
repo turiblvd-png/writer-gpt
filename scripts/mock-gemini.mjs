@@ -53,6 +53,15 @@ No. It is an exhibition, so results never touch the ATP rankings.
 At ANB Arena in Riyadh, during Riyadh Season.`;
 
 function answer(prompt) {
+  if (/Write social posts promoting this article/i.test(prompt))
+    return JSON.stringify({ posts: [
+      { platform: 'linkedin', parts: ['The 2026 Six Kings Slam runs 21-24 October at ANB Arena in Riyadh.\n\nSix players, two byes, one of the richest purses in tennis. Here is how to get tickets and watch it.\n\nWhich match are you watching first?\n\n[LINK]'], hashtags: ['SixKingsSlam', 'Tennis'] },
+      { platform: 'x', parts: ['Six Kings Slam 2026: 21-24 October, ANB Arena, Riyadh.', 'Two of the six players get semifinal byes.', 'Tickets, schedule and streams: [LINK]'], hashtags: ['SixKingsSlam'] },
+      { platform: 'facebook', parts: ['Six Kings Slam is back in Riyadh from 21 October. Here is the full guide. [LINK]'], hashtags: [] },
+      { platform: 'instagram', parts: ['Six players. Four nights. One trophy.\n\nThe Six Kings Slam returns to Riyadh on 21 October. Save this for the schedule.\n\nLink in bio.'], hashtags: ['SixKingsSlam', 'Riyadh', 'Tennis'] },
+    ] });
+  if (/senior SEO strategist working inside Writer-GPT/i.test(prompt) || /Reply to the last USER message/i.test(prompt))
+    return '**Short answer:** official and ticketing sites own page one right now.\n\n1. Riyadh Season holds the top result.\n2. Netflix ranks for the streaming angle.\n\nNext step: run Keyword Research on the ticket queries.';
   if (/List 8 questions real customers would ask/i.test(prompt))
     return JSON.stringify({ queries: ['how much are six kings slam tickets', 'where to buy six kings slam tickets', 'six kings slam 2026 schedule', 'is the six kings slam worth attending'] });
   if (/Report what you find, plainly/i.test(prompt))

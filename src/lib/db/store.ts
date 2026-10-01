@@ -17,6 +17,9 @@ export interface ArticleRecord {
   wordCount: number;
   status: 'draft' | 'published' | 'failed';
   sources: Source[];
+  /** Set once the article has been sent to WordPress. */
+  wpPostId?: number;
+  publishedUrl?: string;
   createdAt: number;
   updatedAt: number;
 }

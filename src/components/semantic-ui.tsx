@@ -109,8 +109,8 @@ export function Spinner({ className = 'h-4 w-4' }: { className?: string }) {
 export function StatTile({ label, value, tone }: { label: string; value: string | number; tone?: 'ok' | 'warn' | 'bad' }) {
   const colour = tone === 'ok' ? 'text-ok' : tone === 'warn' ? 'text-warn' : tone === 'bad' ? 'text-bad' : 'text-ink';
   return (
-    <div className="rounded-xl border border-line bg-surface-2 p-3 text-center">
-      <p className={`text-lg font-bold ${colour}`}>{value}</p>
+    <div className="min-w-0 rounded-xl border border-line bg-surface-2 p-3 text-center">
+      <p className={`truncate text-lg font-bold ${colour}`} title={String(value)}>{value}</p>
       <p className="mt-0.5 text-[10px] uppercase tracking-wide text-ink-3">{label}</p>
     </div>
   );

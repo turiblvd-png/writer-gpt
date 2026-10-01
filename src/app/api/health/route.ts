@@ -43,6 +43,16 @@ export async function GET() {
       'semantic-writer': { status: 'ready', stages: STEPS.length },
       humanizer: 'ready',
       'rewrite-url': 'ready',
+      autopilot: { status: 'ready', scheduled: Boolean(process.env.CRON_SECRET) },
+      'seo-copilot': 'ready',
+      'ai-visibility': 'ready',
+      'keyword-research': 'ready',
+      'content-audit': 'ready',
+      reports: 'ready',
+      'social-posts': 'ready',
+      'content-calendar': 'ready',
+      wordpress: 'ready',
     },
+    access: { passwordProtected: Boolean(process.env.APP_PASSWORD) },
   });
 }
