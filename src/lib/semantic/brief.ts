@@ -73,20 +73,30 @@ export interface LengthBudget {
   raised: boolean;
 }
 
-const OPENING_WORDS = 150; // key takeaways, definition, last-updated line
+export const OPENING_WORDS = 150; // key takeaways, definition, last-updated line
 const PER_H2_INTRO = 40;
 const PER_H3 = 70;
+// The least a heading can carry and still be useful: a direct answer plus one
+// supporting specific. The requested length is only raised to this floor, so a
+// big outline gives tight sections rather than an article twice the size asked.
+const MIN_OPENING = 120;
+const MIN_PER_H2_INTRO = 30;
+const MIN_PER_H3 = 45;
 
 export function lengthBudget(outline: OutlineHeading[], requested: number): LengthBudget {
   const h2 = outline.filter((h) => h.level === 2).length;
   const h3 = outline.filter((h) => h.level >= 3).length;
-  const minimum = Math.round((OPENING_WORDS + h2 * PER_H2_INTRO + h3 * PER_H3) / 50) * 50;
+  const minimum = Math.round((MIN_OPENING + h2 * MIN_PER_H2_INTRO + h3 * MIN_PER_H3) / 50) * 50;
   const effective = Math.max(requested, minimum);
+  // Roomy targets get the full intro allowance; tight ones get the floor.
+  const roomy = effective >= OPENING_WORDS + h2 * PER_H2_INTRO + h3 * PER_H3;
+  const perH2Intro = roomy ? PER_H2_INTRO : MIN_PER_H2_INTRO;
+  const opening = roomy ? OPENING_WORDS : MIN_OPENING;
   // Spread what is left over evenly, so a generous target deepens sections
   // instead of growing the introduction.
-  const spare = Math.max(0, effective - OPENING_WORDS - h2 * PER_H2_INTRO);
-  const perH3 = h3 ? Math.max(PER_H3, Math.round(spare / h3 / 10) * 10) : PER_H3;
-  return { requested, minimum, effective, h2, h3, perH3, perH2Intro: PER_H2_INTRO, raised: effective > requested };
+  const spare = Math.max(0, effective - opening - h2 * perH2Intro);
+  const perH3 = h3 ? Math.max(MIN_PER_H3, Math.round(spare / h3 / 5) * 5) : PER_H3;
+  return { requested, minimum, effective, h2, h3, perH3, perH2Intro, raised: effective > requested };
 }
 
 /** The most headings a word target can carry well, for the outline generator. */

@@ -6,9 +6,12 @@ import { Notice, Panel, Spinner, StatTile } from '@/components/semantic-ui';
 import { IconAlert, IconBook, IconCheck, IconCopy, IconEdit, IconEye, IconSpark, IconTerminal } from '@/components/icons';
 import { analyseSeo } from '@/lib/seo/analysis';
 import { renderMarkdown } from '@/lib/content/render';
-import { reviewSummary, reviewWarnings } from '@/lib/semantic/megaprompt';
-import { lengthBudget } from '@/lib/semantic/brief';
-import { assessArticle, plannedOutline } from '@/lib/semantic/quality';
+import { buildMegaPrompt, reviewSummary, reviewWarnings } from '@/lib/semantic/megaprompt';
+import { assessArticle } from '@/lib/semantic/quality';
+import { planParts } from '@/lib/semantic/sections';
+import { makeClock } from '@/lib/pipeline/engine';
+import { readJson } from '@/lib/http/read-json';
+import type { SemanticProject } from '@/lib/semantic/types';
 import { FactsPanel } from './stages-facts';
 import { STEPS } from '@/lib/semantic/steps';
 
@@ -158,19 +161,33 @@ export function AiInstructionsStage({ api }: { api: StageApi }) {
   );
 }
 
-/** The article steps, each one request. `after` is the stage saved before it runs. */
-const ARTICLE_FLOW = [
-  { action: 'write-draft', label: 'Writing the draft', after: undefined },
-  { action: 'polish-article', label: 'Removing AI writing patterns', after: 'draft' },
-  { action: 'revise-article', label: 'Checking the brief and fixing gaps', after: 'polished' },
-  { action: 'finish-article', label: 'Metadata and fact check', after: 'revised' },
-] as const;
+/** How many parts are written at once. Each is its own request. */
+const CONCURRENCY = 6;
+
+type Flow = { label: string; done: number; total: number; startedAt: number };
+
+async function postAction(projectId: string, action: string, body: Record<string, unknown>) {
+  try {
+    const res = await fetch(`/api/semantic/projects/${projectId}/action`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, ...body }),
+    });
+    const data = await readJson(res);
+    if (!res.ok) return { ok: false as const, error: String(data.error ?? 'Action failed.') };
+    return { ok: true as const, project: data.project as SemanticProject };
+  } catch {
+    return { ok: false as const, error: 'Could not reach the server. Check your connection and try again.' };
+  }
+}
+
+const filled = (p?: SemanticProject) => p?.data.draft?.parts.filter(Boolean).length ?? 0;
 
 export function MasterPromptStage({ api, onNavigate }: { api: StageApi; onNavigate: (i: number) => void }) {
-  const { project, runAction, busy, error } = api;
+  const { project, runAction, busy, error, setProject } = api;
   const [copied, setCopied] = useState(false);
-  const [flow, setFlow] = useState<{ step: number; total: number; label: string; startedAt: number } | null>(null);
-  const [flowFailed, setFlowFailed] = useState(false);
+  const [flow, setFlow] = useState<Flow | null>(null);
+  const [flowError, setFlowError] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
   const buttonRef = useRef<HTMLDivElement>(null);
 
@@ -180,43 +197,91 @@ export function MasterPromptStage({ api, onNavigate }: { api: StageApi; onNaviga
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, [flow]);
-  const megaPrompt = project.data.megaPrompt;
 
+  // Always the brief the writer will actually get, never a stale saved copy.
+  const megaPrompt = useMemo(() => buildMegaPrompt(project, makeClock()), [project]);
+  const plan = useMemo(() => planParts(project), [project]);
   const summary = useMemo(() => reviewSummary(project), [project]);
   const { blocking, advisory } = useMemo(() => reviewWarnings(project), [project]);
-  const budget = useMemo(() => lengthBudget(plannedOutline(project), project.data.wordCount.target), [project]);
+  const budget = plan.budget;
   const running = Boolean(flow);
-  const stage = project.data.article?.stage;
-  // An article left part-way (a step failed or the tab closed) resumes at the next step.
-  const resumeFrom = stage && stage !== 'done' ? ARTICLE_FLOW.findIndex((f) => f.after === stage) : -1;
 
-  /**
-   * Runs the article steps as separate requests, each well inside the host's
-   * time limit. Facts are researched first when missing.
-   */
-  async function runFlow(from: number) {
-    setFlowFailed(false);
-    const steps: { action: string; label: string; optional?: boolean }[] = [
-      ...(from === 0 && !project.data.facts?.facts.length
-        ? [{ action: 'research-facts', label: 'Getting facts from the competitor pages', optional: true }]
-        : []),
-      ...ARTICLE_FLOW.slice(from),
-    ];
-    const startedAt = Date.now();
+  const draft = project.data.draft;
+  const resumableParts = draft && draft.planKey === plan.key && draft.total === plan.parts.length ? draft : null;
+  const partsLeft = resumableParts ? resumableParts.parts.filter((p) => !p).length : 0;
+  const stage = project.data.article?.stage;
+  const needsFinish = Boolean(stage && stage !== 'done') && !resumableParts;
+
+  function fail(message: string) {
+    setFlow(null);
+    setFlowError(message);
     buttonRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    for (const [i, step] of steps.entries()) {
-      setFlow({ step: i + 1, total: steps.length, label: step.label, startedAt });
-      const ok = await runAction(step.action);
-      // Facts make the article better but must never stop it being written.
-      if (!ok && !step.optional) {
-        setFlow(null);
-        setFlowFailed(true);
-        buttonRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        return;
-      }
-    }
+  }
+
+  async function finish(startedAt: number) {
+    setFlow({ label: 'Metadata and fact check', done: 0, total: 0, startedAt });
+    // The article is already saved; a failed fact check only skips the claim list.
+    await runAction('finish-article');
     setFlow(null);
     onNavigate(STEPS.length - 1);
+  }
+
+  /**
+   * Facts first (they are the only source of specifics), then every part at
+   * once, then assembly and the finishing checks. Each request saves, so a
+   * failure keeps everything already written and the run can continue.
+   */
+  async function runFlow(resume: boolean) {
+    setFlowError(null);
+    api.clearError();
+    const startedAt = Date.now();
+    buttonRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+    if (!resume && !project.data.facts?.facts.length) {
+      setFlow({ label: 'Getting facts from the competitor pages', done: 0, total: 0, startedAt });
+      // Facts make the article better but must never stop it being written.
+      await runAction('research-facts');
+    }
+
+    const runId = resume && resumableParts ? resumableParts.runId : crypto.randomUUID();
+    const todo = plan.parts
+      .map((p) => p.index)
+      .filter((i) => !(resume && resumableParts?.parts[i]));
+    const total = plan.parts.length;
+    let done = total - todo.length;
+    let latest: SemanticProject | undefined;
+    let lastError = '';
+    setFlow({ label: `Writing ${total} parts at once`, done, total, startedAt });
+
+    const queue = [...todo];
+    const worker = async () => {
+      for (let i = queue.shift(); i !== undefined; i = queue.shift()) {
+        // One automatic retry per part before giving up on it.
+        let res = await postAction(project.id, 'write-part', { runId, index: i });
+        if (!res.ok) res = await postAction(project.id, 'write-part', { runId, index: i });
+        if (res.ok) {
+          done++;
+          if (filled(res.project) >= filled(latest)) latest = res.project;
+          setFlow((f) => (f ? { ...f, done } : f));
+        } else {
+          lastError = res.error;
+        }
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, todo.length) }, worker));
+    if (latest) setProject(latest);
+
+    if (done < total) {
+      fail(`${total - done} of ${total} parts could not be written. ${lastError} Everything written so far is saved.`);
+      return;
+    }
+
+    setFlow({ label: 'Joining the parts and checking the brief', done: total, total, startedAt });
+    if (!(await runAction('assemble-article', { runId }))) {
+      fail('The parts were written but could not be joined. Try again.');
+      return;
+    }
+    await finish(startedAt);
   }
 
   const rows: [string, string | number][] = [
@@ -249,9 +314,9 @@ export function MasterPromptStage({ api, onNavigate }: { api: StageApi; onNaviga
 
       {budget.raised && (
         <Notice tone="warn">
-          Your outline has {budget.h2} H2 and {budget.h3} H3 sections, which needs about {budget.minimum.toLocaleString()} words to say
-          something useful under each. The brief asks for {budget.effective.toLocaleString()} words instead of {budget.requested.toLocaleString()}.
-          To keep it shorter, remove headings in Outline Creation.
+          Your outline has {budget.h2} H2 and {budget.h3} H3 sections. To give each one a short, useful answer the article
+          needs at least {budget.minimum.toLocaleString()} words, so it will be about {budget.effective.toLocaleString()} words
+          instead of {budget.requested.toLocaleString()}. To make it shorter, remove headings in Outline Creation.
         </Notice>
       )}
 
@@ -260,37 +325,24 @@ export function MasterPromptStage({ api, onNavigate }: { api: StageApi; onNaviga
       <Panel
         icon={<IconTerminal />}
         title="Master prompt"
-        subtitle="Every stage compiled into the single brief the writer receives."
+        subtitle={`Every stage compiled into one brief. The article is written as ${plan.parts.length} parts at the same time, each from this brief.`}
         action={
-          <div className="flex shrink-0 gap-2">
-            {megaPrompt && (
-              <button
-                className="btn-ghost px-3 py-1.5 text-xs"
-                onClick={() => {
-                  void navigator.clipboard?.writeText(megaPrompt).then(() => {
-                    setCopied(true);
-                    setTimeout(() => setCopied(false), 1800);
-                  });
-                }}
-              >
-                {copied ? <><IconCheck className="h-3.5 w-3.5" /> Copied</> : <><IconCopy className="h-3.5 w-3.5" /> Copy</>}
-              </button>
-            )}
-            <button className="btn-primary px-3 py-1.5 text-xs" disabled={Boolean(busy)} onClick={() => runAction('compile-mega-prompt')}>
-              {busy === 'compile-mega-prompt' ? <Spinner className="h-3.5 w-3.5" /> : megaPrompt ? 'Recompile' : 'Compile'}
-            </button>
-          </div>
+          <button
+            className="btn-ghost shrink-0 px-3 py-1.5 text-xs"
+            onClick={() => {
+              void navigator.clipboard?.writeText(megaPrompt).then(() => {
+                setCopied(true);
+                setTimeout(() => setCopied(false), 1800);
+              });
+            }}
+          >
+            {copied ? <><IconCheck className="h-3.5 w-3.5" /> Copied</> : <><IconCopy className="h-3.5 w-3.5" /> Copy</>}
+          </button>
         }
       >
-        {megaPrompt ? (
-          <pre className="max-h-[520px] overflow-auto whitespace-pre-wrap rounded-xl bg-canvas p-4 font-mono text-[11px] leading-relaxed text-ink-2">
-            {megaPrompt}
-          </pre>
-        ) : (
-          <p className="text-sm text-ink-3">
-            Not compiled yet. Compile to see exactly what the writer will be told; nothing is hidden.
-          </p>
-        )}
+        <pre className="max-h-[520px] overflow-auto whitespace-pre-wrap rounded-xl bg-canvas p-4 font-mono text-[11px] leading-relaxed text-ink-2">
+          {megaPrompt}
+        </pre>
       </Panel>
 
       {blocking.map((w) => <Notice key={w} tone="bad">{w}</Notice>)}
@@ -301,33 +353,48 @@ export function MasterPromptStage({ api, onNavigate }: { api: StageApi; onNaviga
         <Notice tone="info">
           <span className="flex items-center gap-2">
             <Spinner className="h-4 w-4 shrink-0" />
-            <span>
-              <span className="font-semibold">Step {flow.step} of {flow.total}:</span> {flow.label}…{' '}
+            <span className="flex-1">
+              <span className="font-semibold">{flow.label}</span>
+              {flow.total > 0 && <>: {flow.done} of {flow.total} done</>}
+              …{' '}
               <span className="font-mono text-xs text-ink-3">{Math.floor((now - flow.startedAt) / 1000)}s</span>
-              <span className="block text-xs text-ink-3">Each step saves as it finishes, so nothing is lost if one fails. A full article usually takes 1 to 4 minutes.</span>
+              {flow.total > 0 && (
+                <span className="mt-2 block h-1.5 overflow-hidden rounded-full bg-surface-2">
+                  <span className="block h-full rounded-full bg-accent transition-all" style={{ width: `${Math.round((flow.done / flow.total) * 100)}%` }} />
+                </span>
+              )}
+              <span className="mt-1 block text-xs text-ink-3">Every part saves as it finishes, so nothing is lost if one fails. A full article usually takes 1 to 2 minutes.</span>
             </span>
           </span>
         </Notice>
       )}
-      {flowFailed && error && (
+      {!running && (flowError || (error && !busy)) && (
         <Notice tone="bad">
-          <span className="font-semibold">The article could not be finished: </span>{error}
+          <span className="font-semibold">The article could not be finished: </span>{flowError ?? error}
         </Notice>
       )}
 
-      {!running && resumeFrom > 0 && (
+      {!running && partsLeft > 0 && (
         <Notice tone="warn">
-          The last run stopped after &ldquo;{ARTICLE_FLOW[resumeFrom - 1]!.label.toLowerCase()}&rdquo;. The draft so far is saved in the Content Editor.{' '}
-          <button className="font-semibold text-accent underline" onClick={() => void runFlow(resumeFrom)}>
-            Continue from &ldquo;{ARTICLE_FLOW[resumeFrom]!.label.toLowerCase()}&rdquo;
+          {plan.parts.length - partsLeft} of {plan.parts.length} parts are written and saved.{' '}
+          <button className="font-semibold text-accent underline" onClick={() => void runFlow(true)}>
+            Write the remaining {partsLeft}
+          </button>
+        </Notice>
+      )}
+      {!running && needsFinish && (
+        <Notice tone="warn">
+          The article is written but the metadata and fact check did not finish.{' '}
+          <button className="font-semibold text-accent underline" onClick={() => void finish(Date.now())}>
+            Finish it now
           </button>
         </Notice>
       )}
 
       <button
         className="btn-primary w-full py-4 text-base"
-        disabled={Boolean(busy) || blocking.length > 0}
-        onClick={() => void runFlow(0)}
+        disabled={Boolean(busy) || running || blocking.length > 0}
+        onClick={() => void runFlow(false)}
       >
         {running ? <><Spinner /> Writing the article…</> : <><IconSpark className="h-5 w-5" /> {project.data.article ? 'Generate a new article' : 'Generate article'}</>}
       </button>

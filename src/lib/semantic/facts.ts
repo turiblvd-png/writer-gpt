@@ -121,6 +121,8 @@ export function parseFactSheet(raw: string, competitorUrls: string[], mode: Mode
 const PAGE_CHARS = 6000;
 const MAX_PAGES = 4;
 const LIVE_BUDGET_MS = 90_000;
+/** Live search plus this stays well inside the host's 300 s limit. */
+const STRUCTURE_BUDGET_MS = 120_000;
 
 /**
  * Builds the fact sheet. By default from the competitor pages already
@@ -157,7 +159,7 @@ export async function buildFactSheet(project: SemanticProject, clock: RunClock, 
 
   const res = await complete(
     'structure',
-    { prompt: structurePrompt(project, research, pages, clock, mode), json: true, temperature: 0.1, maxOutputTokens: 3000 },
+    { prompt: structurePrompt(project, research, pages, clock, mode), json: true, temperature: 0.1, maxOutputTokens: 3000, signal: AbortSignal.timeout(STRUCTURE_BUDGET_MS) },
     { retries: 1 },
   );
   return parseFactSheet(res.text, pages.map((p) => p.url), mode);

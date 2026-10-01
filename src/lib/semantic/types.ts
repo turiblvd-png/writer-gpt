@@ -174,7 +174,23 @@ export interface ProjectData {
   megaPrompt?: string;
   /** Checked facts the writer may use for specifics (Master Prompt stage). */
   facts?: FactSheet;
+  /** Parts written so far by the current parallel writing run. */
+  draft?: DraftProgress;
   article?: ArticleOutput;
+}
+
+/**
+ * The article is written as several parts at once, each its own request, so a
+ * long article finishes in about the time one short part takes and no request
+ * comes near the host's time limit. Parts save here as they land.
+ */
+export interface DraftProgress {
+  runId: string;
+  /** Identifies the outline and length the parts were planned from. */
+  planKey: string;
+  total: number;
+  parts: (string | null)[];
+  startedAt: number;
 }
 
 export interface SemanticProject {

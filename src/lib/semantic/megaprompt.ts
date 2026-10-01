@@ -3,6 +3,7 @@ import { houseStyle } from '@/lib/style/rules';
 import type { SemanticProject } from './types';
 import { keywordTargets, lengthBudget, splitKeywords, usefulPairs, usefulPhrases, usefulTerms, withFaqQuestions } from './brief';
 import { factSheetBlock } from './fact-block';
+import type { ArticlePart, PartPlan } from './sections';
 
 /**
  * Compiles all 14 stages into the single brief the writer receives.
@@ -20,6 +21,12 @@ export interface MegaPromptOptions {
   maxNgrams?: number;
   maxKeywords?: number;
   maxSkipGrams?: number;
+  /**
+   * Brief for one part of an article written in parallel parts. Shared rules
+   * come first and are identical for every part, so providers that cache
+   * prompt prefixes only bill the part-specific tail in full.
+   */
+  part?: { part: ArticlePart; plan: PartPlan };
 }
 
 export function buildMegaPrompt(
@@ -54,6 +61,7 @@ export function buildMegaPrompt(
   const targets = keywordTargets(keywords, budget.effective);
   const facts = data.facts;
   const hasUnconfirmed = Boolean(facts?.facts.some((f) => f.status === 'unconfirmed' || f.status === 'conflicting'));
+  const part = opts.part?.part;
 
   const sections: string[] = [];
 
@@ -65,7 +73,13 @@ export function buildMegaPrompt(
   );
 
   sections.push(
-    section('BRIEF', [
+    section('BRIEF', part ? [
+      `Topic: ${primary}`,
+      `Language: ${language}`,
+      `The whole article is about ${budget.effective.toLocaleString()} words, written as ${opts.part!.plan.parts.length} parts at the same time by different writers from this same brief. You write one part; its headings, length and targets are under YOUR PART at the end.`,
+      `Section budget: about ${budget.perH2Intro} words directly under each H2, about ${budget.perH3} words under each H3. Depth comes from specifics, not length.`,
+      `Today's date: ${clock.today}. The current year is ${clock.year}.`,
+    ] : [
       `Topic: ${primary}`,
       `Language: ${language}`,
       `Target length: ${budget.effective.toLocaleString()} words${data.wordCount.competitorAverage ? ` (competitor average: ${data.wordCount.competitorAverage.toLocaleString()})` : ''}.` +
@@ -85,7 +99,7 @@ export function buildMegaPrompt(
     );
   }
 
-  sections.push(
+  if (!part) sections.push(
     section('ARTICLE OPENING', [
       `1. One H1, first. Use the main keyword once in it.`,
       `2. Directly under the H1: "Last updated: ${clock.today}".`,
@@ -95,7 +109,7 @@ export function buildMegaPrompt(
     ]),
   );
 
-  if (outline.length) {
+  if (outline.length && !part) {
     sections.push(
       section('REQUIRED STRUCTURE', [
         'Follow this heading structure exactly, in order. Do not add, drop, reword or reorder headings. These headings are fixed, so ignore any general rule about heading wording.',
@@ -107,7 +121,7 @@ export function buildMegaPrompt(
     );
   }
 
-  sections.push(
+  if (!part) sections.push(
     section('KEYWORDS', [
       ...targets.map((t) => `- "${t.term}": ${t.min} to ${t.max} times, exact phrase${t.primary ? ' (primary)' : ''}. Close variants also count toward relevance.`),
       'Uses of a longer keyword that contains a shorter one count toward both.',
@@ -117,7 +131,7 @@ export function buildMegaPrompt(
     ]),
   );
 
-  if (entities.length) {
+  if (entities.length && !part) {
     // Coverage targets come from competitor document frequency: an entity every
     // ranking page names is required; one only a single page names is optional.
     const required = entities.filter((e) => (e.documentFrequency ?? 0) >= 2);
@@ -223,6 +237,11 @@ export function buildMegaPrompt(
     sections.push(section('ADDITIONAL INSTRUCTIONS FROM THE USER', [data.aiInstructions.trim()]));
   }
 
+  if (part) {
+    sections.push(...partSections(opts.part!, { primary, questions, entities: entities.map((e) => e.name), hasUnconfirmed, includeFaq: data.seoRules.includeFaq, clock }));
+    return sections.join('\n\n');
+  }
+
   sections.push(
     section('BEFORE YOU RETURN, CHECK SILENTLY AND FIX', [
       '- Zero em dashes, and en dashes only between numbers.',
@@ -243,6 +262,95 @@ export function buildMegaPrompt(
   );
 
   return sections.join('\n\n');
+}
+
+const FAQ_HEADING = /\b(faq|faqs|frequently asked|common questions|questions and answers)\b/i;
+const SOURCES_HEADING = /^(sources?|references)\b/i;
+
+/** The part-specific tail of a part brief: what this writer, and only this writer, must produce. */
+function partSections(
+  { part, plan }: { part: ArticlePart; plan: PartPlan },
+  ctx: { primary: string; questions: string[]; entities: string[]; hasUnconfirmed: boolean; includeFaq: boolean; clock: RunClock },
+): string[] {
+  const mark = (h: { level: number; text: string }) => `${'#'.repeat(Math.max(1, Math.min(6, h.level)))} ${h.text}`;
+  const mine = new Set(part.headings.map(mark));
+  const asked = new Set(ctx.questions.map((q) => q.trim().replace(/\?$/, '').toLowerCase()));
+  const hasFaq = part.headings.some((h) => FAQ_HEADING.test(h.text) || asked.has(h.text.trim().replace(/\?$/, '').toLowerCase()));
+  const hasSources = part.headings.some((h) => SOURCES_HEADING.test(h.text.trim()));
+  const others = ctx.entities.filter((e) => !part.entities.includes(e));
+  const first = part.headings[0];
+
+  const out: string[] = [];
+  out.push(
+    section('FULL ARTICLE OUTLINE (context only)', [
+      'Other writers cover the headings not marked as yours. Do not write about their subjects beyond a passing mention; repeating them makes the joined article repetitive.',
+      '',
+      ...plan.outline.map((h) => `${mark(h)}${mine.has(mark(h)) ? '   [YOUR PART]' : ''}`),
+    ]),
+  );
+
+  out.push(
+    section(`YOUR PART: ${part.index + 1} OF ${plan.parts.length}`, [
+      `Length: about ${part.words.toLocaleString()} words (within 15%).`,
+      '',
+      ...(part.opening
+        ? [
+            'This part opens the article. Start with:',
+            '1. The H1 below, exactly as written.',
+            `2. Directly under it: "Last updated: ${ctx.clock.today}".`,
+            `3. Within the first 50 words, a one-sentence definition: "${ctx.primary} is ...".`,
+            '4. A "Key takeaways" block of 5 short bullets (not a heading) with the most important confirmed facts.',
+            ...(ctx.hasUnconfirmed ? ['5. A short "Confirmed vs not yet announced" list, so readers know what to trust.'] : []),
+            'Then continue with the rest of your headings.',
+          ]
+        : ['This part sits in the middle or end of the article. No introduction, no definition, no key takeaways and no summary of the whole article: start directly with your first heading.']),
+      ...(part.last && !hasSources ? ['Your part ends the article. Close the final section with a practical next step for the reader, not a recap.'] : []),
+      '',
+      'Write exactly these headings, with these levels and this exact wording, in this order, and no others:',
+      ...part.headings.map(mark),
+      ...(hasFaq ? ['', 'Each FAQ heading is a question: answer it in the first one or two sentences under it, then stop.'] : []),
+      ...(hasSources ? ['', 'The Sources section lists only the sources named under VERIFIED FACTS, with their URL where given.'] : []),
+    ]),
+  );
+
+  out.push(
+    section('YOUR KEYWORD TARGETS', [
+      ...part.keywords.map((k) => `- "${k.term}": ${k.min === k.max ? `${k.min}` : `${k.min} to ${k.max}`} times in your part, exact phrase${k.primary ? ' (primary)' : ''}.`),
+      'Uses of a longer keyword that contains a shorter one count toward both.',
+      ...(part.opening ? [`"${ctx.primary}" must appear in the H1 and in the first 100 words.`] : []),
+      ...(hasFaq ? [`Use "${ctx.primary}" in at least one FAQ answer.`] : []),
+      'Going over the range reads as stuffing. Never bend a sentence to fit a keyword.',
+    ]),
+  );
+
+  out.push(
+    section('YOUR ENTITIES', [
+      ...(part.entities.length
+        ? ['Name each of these in your part, with its canonical name, and state how it relates to the topic using only the fact sheet:', ...part.entities.map((e) => `- ${e}`)]
+        : ['No entity is assigned to your part.']),
+      ...(others.length
+        ? ['', 'Other entities from the brief. Name one only where it genuinely belongs under your headings:', others.join(', ')]
+        : []),
+    ]),
+  );
+
+  out.push(
+    section('BEFORE YOU RETURN, CHECK SILENTLY AND FIX', [
+      '- Zero em dashes, and en dashes only between numbers.',
+      '- No paragraph over three sentences or 50 words.',
+      '- No banned word or pattern from the lists above.',
+      '- Every specific traces to the VERIFIED FACTS; nothing is invented.',
+      '- Every one of your headings is present, in order, worded exactly as given, and no other heading.',
+    ]),
+  );
+
+  out.push(
+    section('OUTPUT', [
+      `Return only your part as markdown, starting with the line: ${first ? mark(first) : 'the opening text'}`,
+      'No preamble, no commentary, no code fences.',
+    ]),
+  );
+  return out;
 }
 
 function section(heading: string, lines: string[]): string {

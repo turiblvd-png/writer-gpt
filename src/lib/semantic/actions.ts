@@ -9,11 +9,12 @@ import { extractContent, extractOutline } from './extract';
 import { annotateEntities, extractNGrams, extractNlpKeywords, extractSkipGrams, type Doc } from './nlp';
 import { buildMegaPrompt } from './megaprompt';
 import { buildFactSheet, factSheetBlock } from './facts';
-import { assessArticle, plannedOutline, revisionInstructions } from './quality';
+import { assessArticle, plannedOutline, revisionInstructions, splitLongParagraphs } from './quality';
 import { lengthBudget } from './brief';
+import { fixPartHeadings, planParts } from './sections';
 import { sanitizeDraft } from '@/lib/style/sanitize';
 import * as P from './prompts';
-import { getProject, updateProject } from './store';
+import { getProject, saveDraftPart, updateProject } from './store';
 import type { ArticleOutput, Entity, OutlineHeading, ProjectData, SemanticProject } from './types';
 
 /**
@@ -280,6 +281,109 @@ export interface GenerateProgress {
   (stage: string, message: string): void;
 }
 
+// ── Parallel writing ────────────────────────────────────────────────────────
+
+/** Time one part request may spend before it must save; the host stops it at 300 s. */
+const PART_WRITE_MS = 150_000;
+const PART_BUDGET_MS = 230_000;
+
+/**
+ * Writes one part of the article. The client sends every part at once, so the
+ * article takes about as long as its slowest part. Each part is cleaned
+ * deterministically (dashes, headings, paragraph length) and gets one style
+ * repair only when it still reads as machine-written and time allows.
+ */
+export async function writeArticlePart(id: string, runId: string, index: number): Promise<SemanticProject> {
+  const started = Date.now();
+  const project = await load(id);
+  if (!project.data.combinedOutline.length) {
+    throw new Error('No outline. Combine competitor outlines or add headings before generating.');
+  }
+  if (!runId) throw new Error('Missing run id.');
+  const clock = makeClock();
+  const plan = planParts(project);
+  const part = plan.parts[index];
+  if (!part) throw new Error(`The article has ${plan.parts.length} parts; there is no part ${index + 1}.`);
+
+  const prompt = buildMegaPrompt(project, clock, { part: { part, plan } });
+  const write = () =>
+    complete(
+      'draft',
+      {
+        prompt,
+        temperature: 0.7,
+        maxOutputTokens: Math.min(8000, Math.ceil(part.words * 3) + 1500),
+        signal: AbortSignal.timeout(Math.max(30_000, PART_WRITE_MS - (Date.now() - started))),
+      },
+      { retries: 1 },
+    );
+
+  let fixed = fixPartHeadings(sanitizeDraft(stripFences((await write()).text)).text, part);
+  // A part that lost or reworded headings is rewritten once while time allows,
+  // because a missing heading cannot be repaired without the model.
+  if (!fixed.matched && Date.now() - started < 60_000) {
+    try {
+      const retry = fixPartHeadings(sanitizeDraft(stripFences((await write()).text)).text, part);
+      if (retry.matched) fixed = retry;
+    } catch {
+      // Keep the first version.
+    }
+  }
+  let text = splitLongParagraphs(fixed.markdown);
+
+  if (detectTells(text).humanScore < 70 && Date.now() - started < PART_BUDGET_MS - 90_000) {
+    try {
+      const enforced = await enforceStyle(text, {
+        clock,
+        language: project.language,
+        maxRounds: 1,
+        threshold: 70,
+        signal: AbortSignal.timeout(PART_BUDGET_MS - (Date.now() - started)),
+      });
+      const repaired = fixPartHeadings(enforced.markdown, part);
+      if (repaired.matched || !fixed.matched) text = splitLongParagraphs(repaired.markdown);
+    } catch {
+      // Style repair is an improvement, never a reason to lose the part.
+    }
+  }
+
+  const saved = await saveDraftPart(id, { runId, planKey: plan.key, total: plan.parts.length, index, text });
+  if (!saved) throw new ProjectNotFoundError();
+  return saved;
+}
+
+/** Joins the finished parts into the article and scores it against the brief. */
+export async function assembleArticle(id: string, runId: string): Promise<SemanticProject> {
+  const project = await load(id);
+  const plan = planParts(project);
+  const draft = project.data.draft;
+  if (!draft || draft.runId !== runId) throw new Error('No parts have been written for this run yet. Generate the article again.');
+  if (draft.planKey !== plan.key) {
+    throw new Error('The outline or length changed while writing. Generate the article again.');
+  }
+  const missing = draft.parts.map((p, i) => (p ? -1 : i + 1)).filter((i) => i > 0);
+  if (missing.length) throw new Error(`Part ${missing.join(', ')} is not written yet.`);
+
+  const clock = makeClock();
+  let markdown = sanitizeDraft(draft.parts.join('\n\n')).text.replace(/\n{3,}/g, '\n\n').trim();
+  // The opening rule is deterministic; never leave it to chance.
+  if (!/last updated/i.test(markdown.slice(0, 400))) {
+    markdown = markdown.replace(/^(\s{0,3}#\s.+)$/m, `$1\n\nLast updated: ${clock.today}`);
+  }
+  const title = firstHeading(markdown) || project.name;
+  const article: ArticleOutput = {
+    markdown,
+    seoTitle: title,
+    metaDescription: '',
+    slug: slugify(title),
+    generatedAt: Date.now(),
+    humanScore: detectTells(markdown).humanScore,
+    quality: assessArticle(project, markdown),
+    stage: 'revised',
+  };
+  return await save(id, { article, draft: undefined, megaPrompt: buildMegaPrompt(project, clock) });
+}
+
 /** The article steps in order. The UI runs them one request at a time. */
 export const ARTICLE_STEPS = ['write-draft', 'polish-article', 'revise-article', 'finish-article'] as const;
 export type ArticleStep = (typeof ARTICLE_STEPS)[number];
@@ -407,6 +511,9 @@ export async function reviseArticle(id: string, onProgress?: GenerateProgress): 
   });
 }
 
+/** Both finishing calls run side by side and must answer well inside the host limit. */
+const FINISH_MS = 150_000;
+
 /** Step 4: metadata and fact check, side by side. Either may fail without losing the article. */
 export async function finishArticle(id: string, onProgress?: GenerateProgress): Promise<SemanticProject> {
   const project = await load(id);
@@ -417,10 +524,10 @@ export async function finishArticle(id: string, onProgress?: GenerateProgress): 
   onProgress?.('finish', 'Writing metadata and fact-checking…');
 
   const [meta, check] = await Promise.allSettled([
-    complete('structure', { prompt: P.metaPrompt(project, markdown, clock), json: true, temperature: 0.5 }, { retries: 1 }),
+    complete('structure', { prompt: P.metaPrompt(project, markdown, clock), json: true, temperature: 0.5, signal: AbortSignal.timeout(FINISH_MS) }, { retries: 1 }),
     // Checked against the fact sheet, not a fresh web search: fast, and it is
     // the sheet the article was required to stay within.
-    complete('structure', { prompt: P.verifyPrompt(markdown, factText, clock), json: true, temperature: 0.1 }, { retries: 1 }),
+    complete('structure', { prompt: P.verifyPrompt(markdown, factText, clock), json: true, temperature: 0.1, signal: AbortSignal.timeout(FINISH_MS) }, { retries: 1 }),
   ]);
 
   let { seoTitle, metaDescription, slug } = article;

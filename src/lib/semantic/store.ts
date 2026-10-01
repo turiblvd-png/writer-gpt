@@ -74,3 +74,26 @@ export async function markStepComplete(id: string, stepId: string): Promise<Sema
 export async function deleteProject(id: string): Promise<void> {
   await projects.remove(id);
 }
+
+/**
+ * Saves one part of a parallel writing run. Parts land at the same time, so
+ * the merge happens inside the row lock: a part never overwrites its sibling.
+ * A new run id starts a fresh set of parts.
+ */
+export async function saveDraftPart(
+  id: string,
+  p: { runId: string; planKey: string; total: number; index: number; text: string },
+): Promise<SemanticProject | null> {
+  return projects.mutate(id, (current) => {
+    const project = hydrate(current);
+    const prev = project.data.draft;
+    const same = prev && prev.runId === p.runId && prev.planKey === p.planKey && prev.total === p.total;
+    const parts = Array.from({ length: p.total }, (_, i) => (same ? prev.parts[i] ?? null : null));
+    parts[p.index] = p.text;
+    return {
+      ...project,
+      data: { ...project.data, draft: { runId: p.runId, planKey: p.planKey, total: p.total, parts, startedAt: same ? prev.startedAt : Date.now() } },
+      updatedAt: Date.now(),
+    };
+  });
+}

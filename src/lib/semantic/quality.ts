@@ -13,7 +13,7 @@ import type { QualityCheck, QualityReport, SemanticProject } from './types';
 
 const norm = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
 
-function countPhrase(text: string, phrase: string): number {
+export function countPhrase(text: string, phrase: string): number {
   const p = norm(phrase);
   if (!p) return 0;
   const hay = ` ${norm(text)} `;
@@ -36,6 +36,40 @@ export function paragraphs(markdown: string): string[] {
 
 export function longParagraphs(markdown: string): string[] {
   return paragraphs(markdown).filter((p) => countWords(p) > 50 || splitSentences(p).length > 3);
+}
+
+const NOT_PROSE = /^(#{1,6}\s|[-*+]\s|\d+[.)]\s|\||>|```|!\[)/;
+
+/**
+ * Splits every prose paragraph over three sentences or 50 words at sentence
+ * boundaries. Deterministic and meaning-preserving, so the short-paragraph
+ * rule holds without spending a model call on it.
+ */
+export function splitLongParagraphs(markdown: string): string {
+  return markdown
+    .split(/\n\s*\n/)
+    .map((block) => {
+      const b = block.trim();
+      if (!b || NOT_PROSE.test(b) || b.includes('\n')) return block;
+      const sentences = splitSentences(b);
+      if (sentences.length < 2 || (sentences.length <= 3 && countWords(b) <= 50)) return block;
+      const out: string[][] = [];
+      let cur: string[] = [];
+      let words = 0;
+      for (const s of sentences) {
+        const n = countWords(s);
+        if (cur.length && (cur.length >= 3 || words + n > 50)) {
+          out.push(cur);
+          cur = [];
+          words = 0;
+        }
+        cur.push(s);
+        words += n;
+      }
+      if (cur.length) out.push(cur);
+      return out.map((group) => group.join(' ')).join('\n\n');
+    })
+    .join('\n\n');
 }
 
 export function plannedOutline(project: SemanticProject) {

@@ -52,7 +52,22 @@ No. It is an exhibition, so results never touch the ATP rankings.
 
 At ANB Arena in Riyadh, during Riyadh Season.`;
 
+/** One part of a parallel-written article: writes exactly the headings it was given. */
+function partAnswer(prompt) {
+  const block = /Write exactly these headings[^\n]*\n((?:#{1,6} .+\n?)+)/.exec(prompt)?.[1] ?? '';
+  const headings = block.split('\n').filter((l) => /^#{1,6} /.test(l));
+  return headings
+    .map((h) => {
+      const body = h.startsWith('# ')
+        ? 'Last updated: today.\n\nSix Kings Slam is an exhibition tennis event at ANB Arena in Riyadh.\n\n- Six players.\n- Four days.'
+        : 'The Six Kings Slam answer comes first here. It is held at ANB Arena during Riyadh Season.\n\nA second short paragraph adds one supporting detail.';
+      return `${h}\n\n${body}`;
+    })
+    .join('\n\n');
+}
+
 function answer(prompt) {
+  if (/Return only your part as markdown/i.test(prompt)) return partAnswer(prompt);
   if (/List the specific facts a reader needs/i.test(prompt))
     return 'FACT: Dates | 15-18 October 2026 | riyadhseason.com | CONFIRMED\nFACT: Venue | ANB Arena, Riyadh | riyadhseason.com | CONFIRMED\nFACT: Ticket prices | not announced for 2026 | none | UNCONFIRMED';
   if (/Build a fact sheet for an article/i.test(prompt))
@@ -123,7 +138,8 @@ function answer(prompt) {
 createServer((req, res) => {
   let body = '';
   req.on('data', (c) => (body += c));
-  req.on('end', () => {
+  // MOCK_DELAY_MS simulates model latency, to see parallel requests overlap.
+  req.on('end', () => setTimeout(() => {
     res.setHeader('Content-Type', 'application/json');
 
     // OpenAI-compatible endpoints, standing in for DeepSeek and Grok.
@@ -224,5 +240,5 @@ createServer((req, res) => {
       }],
       usageMetadata: { promptTokenCount: Math.ceil(prompt.length / 4), candidatesTokenCount: Math.ceil(text.length / 4), totalTokenCount: Math.ceil((prompt.length + text.length) / 4) },
     }));
-  });
+  }, Number(process.env.MOCK_DELAY_MS) || 0));
 }).listen(port, '127.0.0.1', () => console.log(`mock gemini on ${port}`));

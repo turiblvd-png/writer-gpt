@@ -5,7 +5,7 @@ import { compileMegaPrompt } from '@/lib/semantic/actions';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-// Extraction fetches several pages and generation runs four model calls.
+// Each article step is sized to finish well inside this; see writeArticlePart.
 export const maxDuration = 300;
 
 /** Actions that never call a model, so they work without an API key. */
@@ -17,7 +17,7 @@ const LOCAL_ACTIONS = new Set([
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
-  let body: { action?: string; urls?: string[]; scope?: A.EntityScope };
+  let body: Body;
   try {
     body = await request.json();
   } catch {
@@ -48,7 +48,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 }
 
-function run(id: string, action: string, body: { urls?: string[]; scope?: A.EntityScope }) {
+interface Body {
+  action?: string;
+  urls?: string[];
+  scope?: A.EntityScope;
+  runId?: string;
+  index?: number;
+}
+
+function run(id: string, action: string, body: Body) {
   switch (action) {
     case 'extract-outlines':     return A.extractOutlines(id, body.urls);
     case 'combine-outlines':     return A.combineOutlines(id);
@@ -63,6 +71,8 @@ function run(id: string, action: string, body: { urls?: string[]; scope?: A.Enti
     case 'compile-mega-prompt':  return compileMegaPrompt(id);
     case 'research-facts':       return A.researchFacts(id);
     case 'research-facts-live':  return A.researchFacts(id, { live: true });
+    case 'write-part':           return A.writeArticlePart(id, String(body.runId ?? ''), Number(body.index ?? -1));
+    case 'assemble-article':     return A.assembleArticle(id, String(body.runId ?? ''));
     case 'write-draft':          return A.writeDraft(id);
     case 'polish-article':       return A.polishArticle(id);
     case 'revise-article':       return A.reviseArticle(id);

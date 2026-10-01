@@ -23,8 +23,10 @@ describe('brief planning', () => {
     const outline = [h(1, 'T'), ...Array.from({ length: 9 }, (_, i) => h(2, `H2 ${i}`)), ...Array.from({ length: 29 }, (_, i) => h(3, `H3 ${i}`))];
     const b = lengthBudget(outline, 1200);
     expect(b.raised).toBe(true);
-    expect(b.minimum).toBeGreaterThanOrEqual(2200);
-    expect(b.minimum).toBeLessThanOrEqual(2700);
+    // A tight floor: a short answer per heading, not a doubled article.
+    expect(b.minimum).toBeGreaterThanOrEqual(1500);
+    expect(b.minimum).toBeLessThanOrEqual(1900);
+    expect(b.perH3).toBeGreaterThanOrEqual(45);
     expect(lengthBudget(outline.slice(0, 8), 1200).raised).toBe(false);
   });
 

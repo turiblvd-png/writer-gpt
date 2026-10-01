@@ -18,6 +18,8 @@ export interface StageApi {
   busy: string | null;
   error: string | null;
   clearError: () => void;
+  /** Adopt a project copy returned by a request made outside runAction. */
+  setProject: (project: SemanticProject) => void;
 }
 
 export function Workspace({ initial }: { initial: SemanticProject }) {
@@ -68,7 +70,7 @@ export function Workspace({ initial }: { initial: SemanticProject }) {
   }, [initial.id]);
 
   const api = useMemo<StageApi>(
-    () => ({ project, patch, runAction, busy, error, clearError: () => setError(null) }),
+    () => ({ project, patch, runAction, busy, error, clearError: () => setError(null), setProject }),
     [project, patch, runAction, busy, error],
   );
 
