@@ -65,7 +65,7 @@ function structurePrompt(project: SemanticProject, research: string, pages: { ur
     '- One fact per item, specific and checkable: dates, times, places, names, prices, numbers, rules.',
     '- Do not add anything that is not in the material above.',
     '- "sources": the sites and pages the article may cite, official sources first. Use URLs only if they appear above.',
-    '- 10 to 20 facts, the ones a reader most needs.',
+    '- 20 to 40 facts: every specific a full article on this topic needs (dates, times, places, people, prices, rules, history, logistics), most important first.',
   ].join('\n');
 }
 
@@ -118,8 +118,8 @@ export function parseFactSheet(raw: string, competitorUrls: string[], mode: Mode
   return { facts, sources, liveSearch: m === 'live', method: m === 'none' ? undefined : m, researchedAt: Date.now() };
 }
 
-const PAGE_CHARS = 6000;
-const MAX_PAGES = 4;
+const PAGE_CHARS = 9000;
+const MAX_PAGES = 5;
 const LIVE_BUDGET_MS = 90_000;
 /** Live search plus this stays well inside the host's 300 s limit. */
 const STRUCTURE_BUDGET_MS = 120_000;
@@ -159,7 +159,7 @@ export async function buildFactSheet(project: SemanticProject, clock: RunClock, 
 
   const res = await complete(
     'structure',
-    { prompt: structurePrompt(project, research, pages, clock, mode), json: true, temperature: 0.1, maxOutputTokens: 3000, signal: AbortSignal.timeout(STRUCTURE_BUDGET_MS), fast: true },
+    { prompt: structurePrompt(project, research, pages, clock, mode), json: true, temperature: 0.1, maxOutputTokens: 6000, signal: AbortSignal.timeout(STRUCTURE_BUDGET_MS), fast: true },
     { retries: 1, prefer: 'deepseek' },
   );
   return parseFactSheet(res.text, pages.map((p) => p.url), mode);

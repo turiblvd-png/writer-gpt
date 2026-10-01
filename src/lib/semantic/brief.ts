@@ -46,14 +46,16 @@ export interface KeywordTarget {
 
 /**
  * Exact-match counts rather than a percentage: a model cannot count density as
- * it writes, but it can aim for "10 to 14 times". The primary keyword sits near
- * 1%, secondaries near 0.4%, which keeps the page natural.
+ * it writes, but it can aim for "10 to 14 times". Counted in body text only:
+ * headings come from the outline, and a keyword in them is placement, not
+ * stuffing. The primary keyword sits around 0.5 to 0.9%, secondaries around
+ * 0.15 to 0.35%, which reads naturally.
  */
 export function keywordTargets(keywords: string[], words: number): KeywordTarget[] {
   return keywords.map((term, i) => {
     const primary = i === 0;
-    const lo = Math.max(primary ? 4 : 2, Math.round(words * (primary ? 0.004 : 0.0015)));
-    const hi = Math.max(lo + 2, Math.round(words * (primary ? 0.006 : 0.0025)));
+    const lo = Math.max(primary ? 4 : 2, Math.round(words * (primary ? 0.005 : 0.0015)));
+    const hi = Math.max(lo + 2, Math.round(words * (primary ? 0.009 : 0.0035)));
     return { term, primary, min: lo, max: hi };
   });
 }

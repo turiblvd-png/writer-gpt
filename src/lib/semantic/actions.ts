@@ -579,11 +579,15 @@ export async function finishArticle(id: string, onProgress?: GenerateProgress): 
     try {
       const parsed = extractJson<{ claims?: unknown }>(check.value.text);
       if (Array.isArray(parsed.claims)) {
-        unverifiedClaims = parsed.claims
+        const items = parsed.claims
           .filter((c): c is Record<string, unknown> => typeof c === 'object' && c !== null)
-          .filter((c) => c.verdict !== 'supported')
-          .map((c) => `${String(c.text ?? '')}${c.note ? `, ${String(c.note)}` : ''}`)
-          .filter((t) => t.trim().length > 0);
+          .filter((c) => c.verdict === 'unsupported' || c.verdict === 'contradicted');
+        // Contradictions first: they are the ones that are actually wrong.
+        items.sort((a, b) => Number(b.verdict === 'contradicted') - Number(a.verdict === 'contradicted'));
+        unverifiedClaims = [...new Set(items
+          .map((c) => `${c.verdict === 'contradicted' ? 'Contradicts the fact sheet: ' : ''}${String(c.text ?? '')}${c.note ? `, ${String(c.note)}` : ''}`)
+          .filter((t) => t.trim().length > 0))]
+          .slice(0, 25);
       }
     } catch {
       onProgress?.('verify', 'Fact-check output could not be parsed; claims were not verified.');

@@ -72,6 +72,11 @@ export function splitLongParagraphs(markdown: string): string {
     .join('\n\n');
 }
 
+/** The article without its heading lines. */
+export function bodyText(markdown: string): string {
+  return markdown.split('\n').filter((l) => !/^\s{0,3}#{1,6}\s/.test(l)).join('\n');
+}
+
 export function plannedOutline(project: SemanticProject) {
   const d = project.data;
   const questions = (d.selectedQuestions.length ? d.selectedQuestions : d.autoSuggest).slice(0, 8);
@@ -93,11 +98,14 @@ export function assessArticle(project: SemanticProject, markdown: string, revise
     detail: `${words.toLocaleString()} words; target ${budget.effective.toLocaleString()} (accepted ${low.toLocaleString()}-${high.toLocaleString()}).`,
   });
 
-  for (const t of keywordTargets(keywords, budget.effective)) {
-    const n = countPhrase(markdown, t.term);
+  // Body text only, against the article's real length: a keyword in an
+  // outline heading is placement, and density is a share of what was written.
+  const body = bodyText(markdown);
+  for (const t of keywordTargets(keywords, Math.max(words, 1))) {
+    const n = countPhrase(body, t.term);
     checks.push({
       id: `keyword:${t.term}`, label: `"${t.term}" uses`, ok: n >= t.min && n <= t.max,
-      detail: `${n} times; aim for ${t.min}-${t.max}.`,
+      detail: `${n} times in the body text; aim for ${t.min}-${t.max}.`,
     });
   }
 

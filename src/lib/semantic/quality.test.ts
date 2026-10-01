@@ -38,3 +38,12 @@ describe('brief self-check', () => {
     expect(revisionInstructions(r).join('\n')).toMatch(/Restore the exact headings/);
   });
 });
+
+describe('keyword check', () => {
+  it('counts the keyword in body text only, not in outline headings', () => {
+    const headings = Array.from({ length: 10 }, (_, i) => `## Heat pump question ${i}\n\nA short answer about installers and costs here.`).join('\n\n');
+    const r = assessArticle(project(), `# Heat pump guide\n\n${headings}`);
+    const kw = r.checks.find((c) => c.id === 'keyword:Heat pump')!;
+    expect(kw.detail).toMatch(/^0 times in the body text/);
+  });
+});

@@ -315,7 +315,8 @@ function partSections(
 
   out.push(
     section('YOUR KEYWORD TARGETS', [
-      ...part.keywords.map((k) => `- "${k.term}": ${k.min === k.max ? `${k.min}` : `${k.min} to ${k.max}`} times in your part, exact phrase${k.primary ? ' (primary)' : ''}.`),
+      ...part.keywords.map((k) => `- "${k.term}": ${k.min === k.max ? `${k.min}` : `${k.min} to ${k.max}`} times in your body text (headings do not count), exact phrase${k.primary ? ' (primary)' : ''}.`),
+      'Elsewhere refer to it naturally ("the tournament", "the event", "it") rather than repeating the full name.',
       'Uses of a longer keyword that contains a shorter one count toward both.',
       ...(part.opening ? [`"${ctx.primary}" must appear in the H1 and in the first 100 words.`] : []),
       ...(hasFaq ? [`Use "${ctx.primary}" in at least one FAQ answer.`] : []),
