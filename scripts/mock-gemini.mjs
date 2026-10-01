@@ -122,6 +122,18 @@ createServer((req, res) => {
     const m = /models\/([^:]+):generateContent/.exec(req.url ?? '');
     if (!m) { res.statusCode = 404; res.end('{}'); return; }
 
+    // QUOTA_PRO=1 answers every Pro call the way Google does for a free key with no Pro allowance.
+    if (process.env.QUOTA_PRO && /pro/.test(m[1])) {
+      res.statusCode = 429;
+      res.end(JSON.stringify({ error: { code: 429, status: 'RESOURCE_EXHAUSTED',
+        message: `You exceeded your current quota. Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 0, model: ${m[1]}`,
+        details: [
+          { '@type': 'type.googleapis.com/google.rpc.QuotaFailure', violations: [{ quotaId: 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', quotaValue: '0' }] },
+          { '@type': 'type.googleapis.com/google.rpc.RetryInfo', retryDelay: '34s' },
+        ] } }));
+      console.log(`[mock] ${m[1]} -> 429 quota`);
+      return;
+    }
     if (retired && retired.test(m[1])) {
       res.statusCode = 404;
       res.end(JSON.stringify({ error: { code: 404, status: 'NOT_FOUND', message: `models/${m[1]} is not found for API version v1beta, or is not supported for generateContent.` } }));

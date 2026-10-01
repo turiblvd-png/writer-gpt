@@ -120,6 +120,9 @@ export async function complete(
       const message = err instanceof Error ? err.message : String(err);
       // An aborted run and a misconfigured request will never succeed on retry.
       if (req.signal?.aborted) throw err;
+      // The provider already stepped down through cheaper models and waited
+      // where that helps; hammering an exhausted quota only burns more of it.
+      if (err instanceof Error && err.name === 'QuotaExceededError') throw err;
       if (attempt === retries || !RETRYABLE.test(message)) throw err;
       await sleep(2 ** attempt * 800 + Math.random() * 400);
     }

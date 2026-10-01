@@ -1,5 +1,6 @@
 import { GoogleGenAI } from '@google/genai';
 import { pickModel, tierOf } from './models';
+import { describeQuota, fallbackChain, isExhausted, isQuotaError, markExhausted, parseQuota, type QuotaInfo } from './quota';
 import {
   GroundingUnsupportedError,
   ProviderNotConfiguredError,
@@ -41,13 +42,56 @@ export class GeminiProvider implements LlmProvider {
   }
 
   async complete(req: CompletionRequest): Promise<CompletionResult> {
-    const model = this.resolved ?? this.model;
+    const primary = this.resolved ?? this.model;
+    const chain = fallbackChain(primary);
+    // Skip models already known to be out of quota; if every one is, still try
+    // the smallest, since its limit may have reset.
+    const order = chain.filter((m) => !isExhausted(m));
+    if (!order.length) order.push(chain[chain.length - 1]!);
+
+    const tried: string[] = [];
+    let quota: QuotaInfo | null = null;
+
+    for (const model of order) {
+      try {
+        const result = await this.callResolving(model, req, model === primary);
+        if (model !== primary) console.warn(`[gemini] ${primary} is out of quota; answered with ${model}.`);
+        return result;
+      } catch (err) {
+        if (isQuotaError(err)) {
+          quota = parseQuota(err);
+          markExhausted(model, quota);
+          tried.push(model);
+          continue;
+        }
+        // A fallback that does not exist for this key is skipped, not fatal.
+        if (model !== primary && isModelNotFound(err)) continue;
+        throw explainGeminiError(err, model);
+      }
+    }
+
+    // A per-minute limit with a short wait: wait once instead of failing.
+    if (quota && !quota.daily && quota.retryAfterMs !== null && quota.retryAfterMs <= 20_000 && !req.signal?.aborted) {
+      await new Promise((r) => setTimeout(r, quota!.retryAfterMs! + 500));
+      try {
+        return await this.callResolving(order[0]!, req, order[0] === primary);
+      } catch (err) {
+        if (!isQuotaError(err)) throw explainGeminiError(err, order[0]!);
+        quota = parseQuota(err);
+      }
+    }
+
+    throw new QuotaExceededError(describeQuota(tried.length ? tried : order, quota ?? parseQuota('')));
+  }
+
+  /** Calls a model; for the primary, swaps in a live replacement if the ID was retired. */
+  private async callResolving(model: string, req: CompletionRequest, isPrimary: boolean): Promise<CompletionResult> {
     try {
       return await this.call(model, req);
     } catch (err) {
       // A retired model ID returns NOT_FOUND on every call. Rather than fail the
       // whole product, find the best live model of the same tier and retry once.
-      if (!this.resolved && isModelNotFound(err)) {
+      if (isPrimary && !this.resolved && isModelNotFound(err)) {
         const replacement = await discoverModel(this.client, tierOf(this.model));
         if (replacement && replacement !== model) {
           this.resolved = replacement;
@@ -55,7 +99,7 @@ export class GeminiProvider implements LlmProvider {
           return await this.call(replacement, req);
         }
       }
-      throw explainGeminiError(err, model);
+      throw err;
     }
   }
 
@@ -118,6 +162,14 @@ export class GeminiProvider implements LlmProvider {
       model,
       provider: this.id,
     };
+  }
+}
+
+/** Every model that could answer is out of quota. Retrying immediately cannot help. */
+export class QuotaExceededError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'QuotaExceededError';
   }
 }
 
