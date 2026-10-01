@@ -1,16 +1,18 @@
 import Link from 'next/link';
+import { safeRead } from '@/lib/db/safe';
 import { Shell, PageHeader } from '@/components/shell';
 import { IconDoc } from '@/components/icons';
 import { listArticles } from '@/lib/db/store';
+import { StorageBanner } from '@/components/storage-banner';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'My Articles · Writer-GPT' };
 
 export default function ArticlesPage() {
-  const articles = listArticles();
+  const articles = safeRead(() => listArticles(), [], 'listArticles');
 
   return (
-    <Shell>
+    <Shell banner={<StorageBanner />}>
       <PageHeader
         title="My Articles"
         subtitle="View and manage your generated articles"

@@ -39,14 +39,21 @@ node scripts/seed-semantic.mjs   # Semantic Writer project with a real corpus
 
 ### Deploying
 
-The storage layer is SQLite on local disk, which rules out serverless hosts
-with an ephemeral filesystem. Vercel will build and serve, but the database
-resets on every cold start, so projects and articles vanish.
+Vercel works, with one caveat. Its lambda filesystem is read-only apart from
+`/tmp`, so the app detects a serverless host and stores the database there
+automatically. Every page and tool runs, but `/tmp` is wiped on each cold
+start, so saved articles and projects do not survive. The UI says so with a
+banner rather than letting the data quietly disappear.
 
-Two options:
+If storage cannot be opened at all, the app falls back to an in-memory database
+and still renders, instead of returning a server-side exception on every route.
+
+For durable storage, two options:
 
 - **A Node host with a persistent volume** (Railway, Render, Fly.io, a VPS).
-  Point `DATABASE_PATH` at the mounted volume and it works as-is. Also the
+  Point `DATABASE_PATH` at the mounted volume and it works as-is. An explicit
+  `DATABASE_PATH` always wins over the serverless default, so this also works
+  on Vercel with a mounted network volume. Also the
   better fit for generation: a 14-stage run is four model calls and a Rewrite
   is five, which exceeds the default function timeout on most serverless tiers.
 - **Swap SQLite for Postgres.** The seam is deliberately narrow: the query

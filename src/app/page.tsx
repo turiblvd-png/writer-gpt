@@ -1,15 +1,17 @@
 import Link from 'next/link';
+import { safeRead } from '@/lib/db/safe';
 import { Shell, PageHeader } from '@/components/shell';
 import { IconDoc, IconHub, IconLink, IconSpark, IconWand } from '@/components/icons';
 import { configuredProviders } from '@/lib/ai';
 import { listArticles } from '@/lib/db/store';
 import { STEPS } from '@/lib/semantic/steps';
+import { StorageBanner } from '@/components/storage-banner';
 
 export const dynamic = 'force-dynamic';
 
 export default function DashboardPage() {
   const providers = configuredProviders();
-  const articles = listArticles(5);
+  const articles = safeRead(() => listArticles(5), [], 'listArticles');
   const totalWords = articles.reduce((sum, a) => sum + a.wordCount, 0);
 
   const tools = [
@@ -20,7 +22,7 @@ export default function DashboardPage() {
   ];
 
   return (
-    <Shell>
+    <Shell banner={<StorageBanner />}>
       <PageHeader title="Dashboard" subtitle="Four tools on one research-grounded engine." />
 
       <div className="mb-7 grid gap-4 sm:grid-cols-3">

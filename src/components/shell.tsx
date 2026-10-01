@@ -27,13 +27,16 @@ const LIBRARY: NavItem[] = [
   { href: '/analytics', label: 'SEO Analytics', icon: IconChart, disabled: true },
 ];
 
-export function Shell({ children }: { children: React.ReactNode }) {
+export function Shell({ children, banner }: { children: React.ReactNode; banner?: React.ReactNode }) {
   return (
     <div className="flex min-h-screen bg-canvas">
       <Sidebar />
       <div className="flex min-w-0 flex-1 flex-col">
         <TopBar />
-        <main className="flex-1 px-6 py-6 lg:px-10">{children}</main>
+        <main className="flex-1 px-6 py-6 lg:px-10">
+          {banner}
+          {children}
+        </main>
       </div>
     </div>
   );

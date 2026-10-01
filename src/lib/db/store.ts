@@ -39,17 +39,67 @@ export interface RunRecord {
   updatedAt: number;
 }
 
+/**
+ * Where the database file lives.
+ *
+ * Serverless platforms ship a read-only bundle with only /tmp writable, so the
+ * default ./data path throws EROFS on the first request and takes down every
+ * page. Detect that and use /tmp instead: the data does not survive a cold
+ * start, but the application runs, which is the difference between a usable
+ * demo and a blank error screen.
+ */
+export type StorageMode = 'persistent' | 'ephemeral' | 'memory';
+
+const SERVERLESS =
+  Boolean(process.env.VERCEL) ||
+  Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME) ||
+  Boolean(process.env.NETLIFY);
+
+export function resolveDatabasePath(): string {
+  if (process.env.DATABASE_PATH) return process.env.DATABASE_PATH;
+  return SERVERLESS ? '/tmp/writer-gpt/writer-gpt.db' : './data/writer-gpt.db';
+}
+
 let db: Database.Database | null = null;
+let mode: StorageMode = 'persistent';
+let storageError: string | null = null;
+
+/** How durable the current storage is, surfaced to the UI and /api/health. */
+export function storageStatus(): { mode: StorageMode; path: string; error: string | null } {
+  // Touch the connection so the mode reflects a real open attempt.
+  try {
+    getDb();
+  } catch {
+    /* status is reported below regardless */
+  }
+  return { mode, path: mode === 'memory' ? ':memory:' : resolveDatabasePath(), error: storageError };
+}
+
+function open(path: string): Database.Database {
+  mkdirSync(dirname(path), { recursive: true });
+  const handle = new Database(path);
+  // WAL lets the generation worker write while the UI reads the run's progress.
+  handle.pragma('journal_mode = WAL');
+  return handle;
+}
 
 export function getDb(): Database.Database {
   if (db) return db;
 
-  const path = process.env.DATABASE_PATH ?? './data/writer-gpt.db';
-  mkdirSync(dirname(path), { recursive: true });
+  const path = resolveDatabasePath();
 
-  db = new Database(path);
-  // WAL lets the generation worker write while the UI reads the run's progress.
-  db.pragma('journal_mode = WAL');
+  try {
+    db = open(path);
+    mode = SERVERLESS || path.startsWith('/tmp') ? 'ephemeral' : 'persistent';
+  } catch (err) {
+    // A read-only or full filesystem must not take the whole app down. An
+    // in-memory database keeps every page working; the UI says data will not
+    // be kept so nobody mistakes it for durable storage.
+    storageError = err instanceof Error ? err.message : String(err);
+    db = new Database(':memory:');
+    mode = 'memory';
+  }
+
   db.pragma('foreign_keys = ON');
 
   db.exec(`

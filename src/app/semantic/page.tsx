@@ -1,9 +1,11 @@
 import Link from 'next/link';
+import { safeRead } from '@/lib/db/safe';
 import { Shell } from '@/components/shell';
 import { listProjects } from '@/lib/semantic/store';
 import { STEPS } from '@/lib/semantic/steps';
 import { NewProjectForm } from './new-project';
 import { IconPlay } from '@/components/icons';
+import { StorageBanner } from '@/components/storage-banner';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Semantic Writer · Writer-GPT' };
@@ -18,10 +20,10 @@ const FEATURES = [
 ];
 
 export default function SemanticLandingPage() {
-  const projects = listProjects();
+  const projects = safeRead(() => listProjects(), [], 'listProjects');
 
   return (
-    <Shell>
+    <Shell banner={<StorageBanner />}>
       <section className="card relative mb-6 overflow-hidden border-accent/20 p-8">
         <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-accent/10 blur-3xl" />
         <div className="relative">

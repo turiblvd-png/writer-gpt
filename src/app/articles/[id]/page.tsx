@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
+import { safeRead } from '@/lib/db/safe';
 import { Shell } from '@/components/shell';
 import { getArticle } from '@/lib/db/store';
 import { analyseSeo } from '@/lib/seo/analysis';
@@ -7,12 +8,13 @@ import { buildSchema } from '@/lib/seo/schema';
 import { renderMarkdown } from '@/lib/content/render';
 import { extractHeadings } from '@/lib/seo/text';
 import { ArticleTabs } from './tabs';
+import { StorageBanner } from '@/components/storage-banner';
 
 export const dynamic = 'force-dynamic';
 
 export default async function ArticlePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const article = getArticle(id);
+  const article = safeRead(() => getArticle(id), null, 'getArticle');
   if (!article) notFound();
 
   const report = analyseSeo({
@@ -24,7 +26,7 @@ export default async function ArticlePage({ params }: { params: Promise<{ id: st
   });
 
   return (
-    <Shell>
+    <Shell banner={<StorageBanner />}>
       <div className="mb-5">
         <Link href="/articles" className="text-sm text-ink-3 hover:text-accent">← My Articles</Link>
         <h2 className="mt-2 text-2xl font-extrabold tracking-tight">{article.title}</h2>
