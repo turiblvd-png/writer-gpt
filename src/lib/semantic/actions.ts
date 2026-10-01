@@ -300,8 +300,13 @@ export async function writeDraft(id: string, onProgress?: GenerateProgress): Pro
   // Facts first. The brief supplies structure and vocabulary; it does not
   // supply truth, and the writer must not fill that gap from memory.
   if (!project.data.facts?.facts.length) {
-    onProgress?.('research', 'Researching and checking facts…');
-    project = await researchFacts(id);
+    onProgress?.('research', 'Getting facts from the competitor pages…');
+    try {
+      project = await researchFacts(id);
+    } catch {
+      // Facts improve the article but must not block it: the brief then tells
+      // the writer to leave out specifics it cannot attribute.
+    }
   }
   const budget = lengthBudget(plannedOutline(project), project.data.wordCount.target);
   const megaPrompt = buildMegaPrompt(project, clock);

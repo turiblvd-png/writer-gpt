@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { StageApi } from './workspace';
 import { Notice, Panel, Spinner, StatTile } from '@/components/semantic-ui';
 import { IconAlert, IconBook, IconCheck, IconCopy, IconEdit, IconEye, IconSpark, IconTerminal } from '@/components/icons';
@@ -167,14 +167,25 @@ const ARTICLE_FLOW = [
 ] as const;
 
 export function MasterPromptStage({ api, onNavigate }: { api: StageApi; onNavigate: (i: number) => void }) {
-  const { project, runAction, busy } = api;
+  const { project, runAction, busy, error } = api;
   const [copied, setCopied] = useState(false);
+  const [flow, setFlow] = useState<{ step: number; total: number; label: string; startedAt: number } | null>(null);
+  const [flowFailed, setFlowFailed] = useState(false);
+  const [now, setNow] = useState(Date.now());
+  const buttonRef = useRef<HTMLDivElement>(null);
+
+  // A visible clock, so a long step never looks frozen.
+  useEffect(() => {
+    if (!flow) return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [flow]);
   const megaPrompt = project.data.megaPrompt;
 
   const summary = useMemo(() => reviewSummary(project), [project]);
   const { blocking, advisory } = useMemo(() => reviewWarnings(project), [project]);
   const budget = useMemo(() => lengthBudget(plannedOutline(project), project.data.wordCount.target), [project]);
-  const running = ARTICLE_FLOW.some((f) => f.action === busy);
+  const running = Boolean(flow);
   const stage = project.data.article?.stage;
   // An article left part-way (a step failed or the tab closed) resumes at the next step.
   const resumeFrom = stage && stage !== 'done' ? ARTICLE_FLOW.findIndex((f) => f.after === stage) : -1;
@@ -184,12 +195,27 @@ export function MasterPromptStage({ api, onNavigate }: { api: StageApi; onNaviga
    * time limit. Facts are researched first when missing.
    */
   async function runFlow(from: number) {
-    if (from === 0 && !project.data.facts?.facts.length) {
-      if (!(await runAction('research-facts'))) return;
+    setFlowFailed(false);
+    const steps: { action: string; label: string; optional?: boolean }[] = [
+      ...(from === 0 && !project.data.facts?.facts.length
+        ? [{ action: 'research-facts', label: 'Getting facts from the competitor pages', optional: true }]
+        : []),
+      ...ARTICLE_FLOW.slice(from),
+    ];
+    const startedAt = Date.now();
+    buttonRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    for (const [i, step] of steps.entries()) {
+      setFlow({ step: i + 1, total: steps.length, label: step.label, startedAt });
+      const ok = await runAction(step.action);
+      // Facts make the article better but must never stop it being written.
+      if (!ok && !step.optional) {
+        setFlow(null);
+        setFlowFailed(true);
+        buttonRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
     }
-    for (const step of ARTICLE_FLOW.slice(from)) {
-      if (!(await runAction(step.action))) return;
-    }
+    setFlow(null);
     onNavigate(STEPS.length - 1);
   }
 
@@ -270,10 +296,22 @@ export function MasterPromptStage({ api, onNavigate }: { api: StageApi; onNaviga
       {blocking.map((w) => <Notice key={w} tone="bad">{w}</Notice>)}
       {advisory.map((w) => <Notice key={w} tone="warn">{w}</Notice>)}
 
-      {running && (
+      <div ref={buttonRef} />
+      {flow && (
         <Notice tone="info">
-          <span className="font-semibold">Step {Math.max(1, ARTICLE_FLOW.findIndex((f) => f.action === busy) + 1)} of {ARTICLE_FLOW.length}:</span>{' '}
-          {ARTICLE_FLOW.find((f) => f.action === busy)?.label ?? 'Working'}. Each step saves as it finishes, so nothing is lost if one fails.
+          <span className="flex items-center gap-2">
+            <Spinner className="h-4 w-4 shrink-0" />
+            <span>
+              <span className="font-semibold">Step {flow.step} of {flow.total}:</span> {flow.label}…{' '}
+              <span className="font-mono text-xs text-ink-3">{Math.floor((now - flow.startedAt) / 1000)}s</span>
+              <span className="block text-xs text-ink-3">Each step saves as it finishes, so nothing is lost if one fails. A full article usually takes 1 to 4 minutes.</span>
+            </span>
+          </span>
+        </Notice>
+      )}
+      {flowFailed && error && (
+        <Notice tone="bad">
+          <span className="font-semibold">The article could not be finished: </span>{error}
         </Notice>
       )}
 

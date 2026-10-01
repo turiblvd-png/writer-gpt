@@ -80,7 +80,7 @@ export function buildMegaPrompt(
   } else {
     sections.push(
       section('VERIFIED FACTS', [
-        'No fact sheet was compiled. A live research brief is attached after this prompt; take every specific from it and nowhere else.',
+        'No fact sheet is available. Do not state specific dates, prices, figures or names you cannot attribute to a named source. Where readers need such a detail, say it should be checked with the official source.',
       ]),
     );
   }

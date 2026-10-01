@@ -168,6 +168,12 @@ createServer((req, res) => {
     const m = /models\/([^:]+):generateContent/.exec(req.url ?? '');
     if (!m) { res.statusCode = 404; res.end('{}'); return; }
 
+    // FAIL_FACTS=1 makes the fact-sheet call fail, to prove writing continues without it.
+    if (process.env.FAIL_FACTS && /Build a fact sheet/.test(body)) {
+      res.statusCode = 400;
+      res.end(JSON.stringify({ error: { code: 400, status: 'INVALID_ARGUMENT', message: 'Simulated fact sheet failure.' } }));
+      return;
+    }
     // QUOTA_ALL=1 answers every Gemini call with a per-minute 429, as a busy free key does.
     if (process.env.QUOTA_ALL) {
       res.statusCode = 429;
