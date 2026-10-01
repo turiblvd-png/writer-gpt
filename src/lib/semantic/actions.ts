@@ -260,9 +260,9 @@ export async function generateQuestions(id: string): Promise<SemanticProject> {
  * Researches the fact sheet. Facts the user added or edited by hand survive a
  * re-run, since they are the user's own knowledge of the topic.
  */
-export async function researchFacts(id: string): Promise<SemanticProject> {
+export async function researchFacts(id: string, opts: { live?: boolean } = {}): Promise<SemanticProject> {
   const project = await load(id);
-  const sheet = await buildFactSheet(project, makeClock());
+  const sheet = await buildFactSheet(project, makeClock(), opts);
   const manual = project.data.facts?.facts.filter((f) => f.manual) ?? [];
   return await save(id, { facts: { ...sheet, facts: [...manual, ...sheet.facts] } });
 }
@@ -413,7 +413,9 @@ export async function finishArticle(id: string, onProgress?: GenerateProgress): 
 
   const [meta, check] = await Promise.allSettled([
     complete('structure', { prompt: P.metaPrompt(project, markdown, clock), json: true, temperature: 0.5 }, { retries: 1 }),
-    complete('verify', { prompt: P.verifyPrompt(markdown, factText, clock), grounded: true, temperature: 0.1 }, { retries: 1 }),
+    // Checked against the fact sheet, not a fresh web search: fast, and it is
+    // the sheet the article was required to stay within.
+    complete('structure', { prompt: P.verifyPrompt(markdown, factText, clock), json: true, temperature: 0.1 }, { retries: 1 }),
   ]);
 
   let { seoTitle, metaDescription, slug } = article;

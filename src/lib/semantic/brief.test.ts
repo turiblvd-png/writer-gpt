@@ -77,3 +77,20 @@ describe('fact sheet', () => {
     expect(block).not.toMatch(/—/);
   });
 });
+
+describe('fact sheet from competitor pages', () => {
+  const pages = ['https://a.example/x', 'https://b.example/y'];
+  it('confirms what pages agree on and attributes the rest', () => {
+    const raw = JSON.stringify({ facts: [
+      { label: 'Venue', value: 'ANB Arena', status: 'confirmed', source: 'a.example, b.example', url: 'https://a.example/x' },
+      { label: 'Dates', value: '15-18 October', status: 'confirmed', source: 'a.example' },
+      { label: 'Prize', value: '6 million USD', status: 'reported', url: 'https://b.example/y' },
+    ] });
+    const sheet = parseFactSheet(raw, pages, 'pages');
+    expect(sheet.method).toBe('pages');
+    expect(sheet.facts.map((f) => f.status)).toEqual(['confirmed', 'unconfirmed', 'reported']);
+    const block = factSheetBlock(sheet, { today: '1 October 2026', year: '2026' } as never).join('\n');
+    expect(block).toMatch(/CONFIRMED \(ranking pages agree\)/);
+    expect(block).not.toMatch(/Live search was unavailable/);
+  });
+});

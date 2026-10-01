@@ -62,6 +62,7 @@ function run(id: string, action: string, body: { urls?: string[]; scope?: A.Enti
     case 'generate-questions':   return A.generateQuestions(id);
     case 'compile-mega-prompt':  return compileMegaPrompt(id);
     case 'research-facts':       return A.researchFacts(id);
+    case 'research-facts-live':  return A.researchFacts(id, { live: true });
     case 'write-draft':          return A.writeDraft(id);
     case 'polish-article':       return A.polishArticle(id);
     case 'revise-article':       return A.reviseArticle(id);

@@ -38,31 +38,34 @@ export function factResearchPrompt(project: SemanticProject, clock: RunClock): s
   ].join('\n');
 }
 
-function structurePrompt(project: SemanticProject, research: string, pages: { url: string; text: string }[], clock: RunClock, live: boolean): string {
+type Mode = 'live' | 'pages' | 'none';
+
+function structurePrompt(project: SemanticProject, research: string, pages: { url: string; text: string }[], clock: RunClock, mode: Mode): string {
   return [
     `It is ${clock.today}. Build a fact sheet for an article on "${project.mainKeyword}".`,
     '',
-    live ? 'LIVE SEARCH BRIEF (current sources):' : 'RESEARCH NOTES (no live search was available; nothing here is confirmed):',
-    research.slice(0, 12000) || '(none)',
-    '',
-    'COMPETITOR PAGES (what ranking pages claim; each block starts with its URL):',
-    ...pages.map((p) => `--- ${p.url}\n${p.text.slice(0, 5000)}`),
+    ...(mode === 'live' ? ['LIVE SEARCH BRIEF (current sources):', research.slice(0, 8000), ''] : []),
+    ...(mode === 'none' ? ['RESEARCH NOTES (no live search and no competitor pages; nothing here is confirmed):', research.slice(0, 8000), ''] : []),
+    'COMPETITOR PAGES (each block starts with its URL):',
+    ...(pages.length ? pages.map((p) => `--- ${p.url}\n${p.text}`) : ['(none)']),
     '',
     'Return JSON only:',
     '{ "facts": [ { "label": "", "value": "", "status": "confirmed|reported|conflicting|unconfirmed", "source": "", "url": "" } ],',
     '  "sources": [ { "name": "", "url": "" } ] }',
     '',
     'Rules:',
-    live
-      ? '- "confirmed": stated by the live search brief. "source" names the site or publication it came from.'
-      : '- Never use "confirmed": live search was unavailable.',
-    '- "reported": stated only by a competitor page. "url" must be that page\'s URL exactly as given above.',
+    mode === 'live'
+      ? '- "confirmed": stated by the live search brief, or by two or more competitor pages that agree. "source" names the site; "url" is a competitor URL when one states it.'
+      : mode === 'pages'
+        ? '- "confirmed": two or more competitor pages state it and agree. "url" is one of those pages, exactly as given; "source" names both sites.'
+        : '- Never use "confirmed".',
+    '- "reported": only one competitor page states it. "url" must be that page\'s URL exactly as given above.',
     '- "conflicting": sources give different values. Put both in "value" and both sources in "source".',
     '- "unconfirmed": a detail readers will look for that no source states (for example not yet announced).',
     '- One fact per item, specific and checkable: dates, times, places, names, prices, numbers, rules.',
     '- Do not add anything that is not in the material above.',
     '- "sources": the sites and pages the article may cite, official sources first. Use URLs only if they appear above.',
-    '- 10 to 30 facts.',
+    '- 10 to 20 facts, the ones a reader most needs.',
   ].join('\n');
 }
 
@@ -71,7 +74,8 @@ function clean(value: unknown, max = 400): string {
 }
 
 /** Turns the model's JSON into a fact sheet, dropping anything malformed or invented. */
-export function parseFactSheet(raw: string, competitorUrls: string[], live: boolean): FactSheet {
+export function parseFactSheet(raw: string, competitorUrls: string[], mode: Mode | boolean): FactSheet {
+  const m: Mode = mode === true ? 'live' : mode === false ? 'none' : mode;
   const data = extractJson<{ facts?: unknown[]; sources?: unknown[] }>(raw);
   const known = new Set(competitorUrls);
   const facts: VerifiedFact[] = [];
@@ -82,11 +86,13 @@ export function parseFactSheet(raw: string, competitorUrls: string[], live: bool
     const value = clean(f.value);
     if (!label || !value) continue;
     let status = STATUSES.includes(f.status as FactStatus) ? (f.status as FactStatus) : 'unconfirmed';
-    if (!live && status === 'confirmed') status = 'reported';
+    if (m === 'none' && status === 'confirmed') status = 'reported';
     let url = clean(f.url, 500);
     // A URL the model did not get from the material is a fabricated citation.
     if (url && !known.has(url)) url = '';
     if (status === 'reported' && !url) status = 'unconfirmed';
+    // From the pages alone, "confirmed" means pages agree, so it must point at one.
+    if (m === 'pages' && status === 'confirmed' && !url) status = 'unconfirmed';
     facts.push({ id: randomUUID(), label, value, status, source: clean(f.source, 160) || (url ? safeDomain(url) : undefined), url: url || undefined });
   }
   const sources: FactSheet['sources'] = [];
@@ -109,29 +115,52 @@ export function parseFactSheet(raw: string, competitorUrls: string[], live: bool
       sources.push({ name: f.source || safeDomain(f.url), url: f.url });
     }
   }
-  return { facts, sources, liveSearch: live, researchedAt: Date.now() };
+  return { facts, sources, liveSearch: m === 'live', method: m === 'none' ? undefined : m, researchedAt: Date.now() };
 }
 
-/** Researches and structures the fact sheet for a project. */
-export async function buildFactSheet(project: SemanticProject, clock: RunClock): Promise<FactSheet> {
+const PAGE_CHARS = 6000;
+const MAX_PAGES = 4;
+const LIVE_BUDGET_MS = 90_000;
+
+/**
+ * Builds the fact sheet. By default from the competitor pages already
+ * extracted: one quick call, since facts the ranking pages agree on are what
+ * the article must match. With `live`, or when there are no pages, a live
+ * search runs first, capped at 90 seconds so it can never hold the user up.
+ */
+export async function buildFactSheet(project: SemanticProject, clock: RunClock, opts: { live?: boolean } = {}): Promise<FactSheet> {
+  const pages = project.data.competitorContent
+    .filter((c) => !c.error && c.text)
+    .slice(0, MAX_PAGES)
+    .map((c) => ({ url: c.url, text: c.text.slice(0, PAGE_CHARS) }));
+
   let research = '';
-  let live = false;
-  try {
-    const res = await complete('research', { prompt: factResearchPrompt(project, clock), grounded: true, temperature: 0.2 });
-    research = res.text;
-    // Only Gemini searches the web here; a stand-in answered from memory.
-    live = res.provider === 'gemini' && (res.sources.length > 0 || /FACT:/i.test(res.text));
-    if (live && res.sources.length) {
-      const names = res.sources.map((s) => s.title || s.domain).filter(Boolean).slice(0, 12);
-      research += `\n\nSources consulted: ${names.join(', ')}`;
+  let mode: Mode = pages.length ? 'pages' : 'none';
+  if (opts.live || !pages.length) {
+    try {
+      const res = await complete(
+        'research',
+        { prompt: factResearchPrompt(project, clock), grounded: true, temperature: 0.2, signal: AbortSignal.timeout(LIVE_BUDGET_MS) },
+        { retries: 0 },
+      );
+      research = res.text;
+      // Only Gemini searches the web here; a stand-in answered from memory.
+      if (res.provider === 'gemini' && (res.sources.length > 0 || /FACT:/i.test(res.text))) {
+        mode = 'live';
+        const names = res.sources.map((s) => s.title || s.domain).filter(Boolean).slice(0, 12);
+        if (names.length) research += `\n\nSources consulted: ${names.join(', ')}`;
+      }
+    } catch {
+      // Too slow or unavailable: the competitor pages are still a good basis.
     }
-  } catch {
-    // No research provider at all: build from the competitor pages alone.
   }
 
-  const pages = project.data.competitorContent.filter((c) => !c.error && c.text).map((c) => ({ url: c.url, text: c.text }));
-  const res = await complete('structure', { prompt: structurePrompt(project, research, pages, clock, live), json: true, temperature: 0.1 });
-  return parseFactSheet(res.text, pages.map((p) => p.url), live);
+  const res = await complete(
+    'structure',
+    { prompt: structurePrompt(project, research, pages, clock, mode), json: true, temperature: 0.1, maxOutputTokens: 3000 },
+    { retries: 1 },
+  );
+  return parseFactSheet(res.text, pages.map((p) => p.url), mode);
 }
 
 export { factSheetBlock } from './fact-block';

@@ -108,23 +108,23 @@ export function questionsPrompt(project: SemanticProject, clock: RunClock): stri
   ].join('\n');
 }
 
-export function verifyPrompt(markdown: string, research: string, clock: RunClock): string {
+export function verifyPrompt(markdown: string, facts: string, clock: RunClock): string {
   return [
-    `It is ${clock.today}. Fact-check this draft against live search.`,
+    `It is ${clock.today}. Check this draft against the fact sheet it was written from.`,
     '',
-    research ? `Fact sheet it was written from:\n${research}\n` : '',
-    'Draft:',
+    facts ? `FACT SHEET:\n${facts}\n` : 'FACT SHEET: (none)\n',
+    'DRAFT:',
     markdown.slice(0, 14000),
     '',
-    'Extract every checkable specific, dates, names, venues, numbers, scores, prices, and "first/only/largest" claims. Ignore opinion and generic description.',
+    'Extract every checkable specific in the draft: dates, names, venues, numbers, scores, prices, and "first/only/largest" claims. Ignore opinion and generic description.',
     '',
-    'Classify each: "supported" (confirmed), "unsupported" (cannot confirm, including anything stated confidently that the brief never mentioned), or "contradicted" (a source says otherwise; say what).',
+    'Classify each: "supported" (the fact sheet states it), "unsupported" (the fact sheet does not state it), or "contradicted" (the fact sheet says otherwise; say what).',
     '',
-    'Be strict. A plausible-sounding specific with no source is "unsupported".',
+    'Be strict. A plausible-sounding specific that is not on the fact sheet is "unsupported".',
     '',
     'Return JSON only:',
     '{ "claims": [ { "text": "", "verdict": "supported", "note": "" } ] }',
-  ].filter(Boolean).join('\n');
+  ].join('\n');
 }
 
 export function metaPrompt(project: SemanticProject, markdown: string, clock: RunClock): string {

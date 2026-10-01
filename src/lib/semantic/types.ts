@@ -131,6 +131,8 @@ export interface FactSheet {
   sources: { name: string; url?: string }[];
   /** False when live search was unavailable, so nothing could be confirmed. */
   liveSearch: boolean;
+  /** Where the facts came from: the competitor pages only (fast), or live search too. */
+  method?: 'pages' | 'live';
   researchedAt: number;
 }
 

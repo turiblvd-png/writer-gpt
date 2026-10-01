@@ -7,7 +7,7 @@ import { Notice, Panel, Spinner } from '@/components/semantic-ui';
 import { IconCheck, IconPlus, IconTrash } from '@/components/icons';
 
 const STATUS: Record<FactStatus, { label: string; style: string; help: string }> = {
-  confirmed: { label: 'Confirmed', style: 'bg-ok/15 text-ok', help: 'A current source states it. The article states it plainly.' },
+  confirmed: { label: 'Confirmed', style: 'bg-ok/15 text-ok', help: 'Ranking pages agree, or a current source states it. The article states it plainly.' },
   reported: { label: 'Reported', style: 'bg-info/15 text-info', help: 'Only a ranking page says it. The article attributes it.' },
   conflicting: { label: 'Conflicting', style: 'bg-warn/15 text-warn', help: 'Sources disagree. The article gives both.' },
   unconfirmed: { label: 'Not confirmed', style: 'bg-surface-3 text-ink-3', help: 'Nobody states it yet. The article says so.' },
@@ -25,7 +25,9 @@ export function FactsPanel({ api }: { api: StageApi }) {
   const sheet = project.data.facts;
   const [label, setLabel] = useState('');
   const [value, setValue] = useState('');
-  const researching = busy === 'research-facts';
+  const researching = busy === 'research-facts' || busy === 'research-facts-live';
+  const live = busy === 'research-facts-live';
+  const pages = project.data.competitorContent.filter((c) => !c.error && c.text).length;
 
   function save(facts: VerifiedFact[]) {
     void patch({
@@ -49,22 +51,40 @@ export function FactsPanel({ api }: { api: StageApi }) {
       title="Verified facts"
       subtitle="The only place the writer may take a date, price, name or number from. Remove anything wrong; add what you know."
       action={
-        <button className="btn-primary px-3 py-1.5 text-xs" disabled={Boolean(busy)} onClick={() => void runAction('research-facts')}>
-          {researching ? <><Spinner className="h-3.5 w-3.5" /> Researching…</> : facts.length ? 'Re-research' : 'Research facts'}
-        </button>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <button className="btn-primary px-3 py-1.5 text-xs" disabled={Boolean(busy)} onClick={() => void runAction('research-facts')}
+                  title="One quick pass over the competitor pages you added">
+            {researching && !live ? <><Spinner className="h-3.5 w-3.5" /> Reading pages…</> : facts.length ? 'Refresh from competitors' : 'Get facts from competitors'}
+          </button>
+          <button className="btn-ghost px-3 py-1.5 text-xs" disabled={Boolean(busy)} onClick={() => void runAction('research-facts-live')}
+                  title="Adds a live Google search for the very latest details. Slower, up to 90 seconds.">
+            {live ? <><Spinner className="h-3.5 w-3.5" /> Searching…</> : 'Check with live search'}
+          </button>
+        </div>
       }
     >
-      {researching && <Notice tone="info">Searching current sources and reading the competitor pages. Usually 20 to 60 seconds.</Notice>}
-      {sheet && !sheet.liveSearch && (
+      {researching && (
+        <Notice tone="info">
+          {live
+            ? 'Searching current sources, then reading the competitor pages. Up to about a minute and a half.'
+            : `Reading ${pages || 'the'} competitor page${pages === 1 ? '' : 's'}. Usually 10 to 20 seconds.`}
+        </Notice>
+      )}
+      {sheet && sheet.method !== 'live' && pages > 0 && !researching && (
+        <p className="mb-3 text-xs text-ink-3">
+          Taken from {pages} competitor page{pages === 1 ? '' : 's'}. Facts two or more pages agree on count as confirmed. For the very latest
+          details (new prices, a change of date), use Check with live search.
+        </p>
+      )}
+      {sheet && sheet.method !== 'live' && pages === 0 && !researching && (
         <Notice tone="warn">
-          Live Google Search was unavailable, so no fact could be independently confirmed. The article will attribute each one to the
-          page that states it. Add facts you know are right as confirmed below.
+          No competitor pages and no live search result, so no fact could be confirmed. Add facts you know are right below.
         </Notice>
       )}
 
       {facts.length === 0 && !researching && (
         <p className="mb-3 text-sm text-ink-3">
-          No fact sheet yet. Research it now, or it runs automatically when you generate the article.
+          No fact sheet yet. Get it now, or it is taken from the competitor pages automatically when you generate the article.
         </p>
       )}
 
