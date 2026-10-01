@@ -40,11 +40,12 @@ node scripts/seed-semantic.mjs   # Semantic Writer project with a real corpus
 
 ### Deploying
 
-Vercel works. Its lambda filesystem is read-only apart from `/tmp`, so the app
-detects a serverless host and stores data there automatically. Every page and
-tool runs, but `/tmp` is wiped on each cold start, so saved articles and
-projects do not survive. The UI says so with a banner rather than letting the
-data quietly disappear.
+**Vercel cannot run this app's storage.** Its lambda filesystem is read-only
+apart from `/tmp`, and `/tmp` belongs to a single instance: a project saved by
+one request is invisible to the next if that request lands elsewhere. The
+symptom is creating a project appearing to fail even though the write
+succeeded. The app detects this and says so in a banner rather than letting it
+look like a random error, but the only real fix is shared storage.
 
 Storage is a plain JSON file, not SQLite. That was a deliberate swap: the app
 does CRUD by id plus list-ordered-by-date, with no joins or aggregates, over at
@@ -55,14 +56,17 @@ before any guard could run, and every route returned an unrecoverable 500.
 
 If the data file cannot be written, the store falls back to memory and the app
 still renders. A corrupt file is set aside under a `.corrupt-<timestamp>` name
-rather than silently overwritten.
+rather than silently overwritten. `GET /api/health` round-trips a write and
+reports `writable` and `perInstance`, so a storage problem is visible without
+reading logs.
 
-For durable storage, two options:For durable storage, two options:
+To deploy somewhere it works:For durable storage, two options:For durable storage, two options:
 
-- **A Node host with a persistent volume** (Railway, Render, Fly.io, a VPS).
-  Point `DATABASE_PATH` at the mounted volume and it works as-is. An explicit
-  `DATABASE_PATH` always wins over the serverless default, so this also works
-  on Vercel with a mounted network volume. Also the
+- **A Node host with a persistent disk** (Railway, Render, Fly.io, a VPS). Point
+  `DATABASE_PATH` at the mounted volume and it works unchanged. This is the
+  recommended option: it fixes storage and the function timeout at once, since
+  a Semantic Writer run is several model calls and takes longer than a
+  serverless function is usually allowed. Also the
   better fit for generation: a 14-stage run is four model calls and a Rewrite
   is five, which exceeds the default function timeout on most serverless tiers.
 - **Move to Postgres.** The seam is deliberately narrow: `src/lib/db/engine.ts`
@@ -166,9 +170,10 @@ provider throws rather than silently dropping one.
 Fourteen stages over a persisted project, not an unattended run: the user
 triggers each action, edits and excludes results, and comes back later.
 
-`Competitor Research → Outline → Word Count → Competitor Content → Entities →
-N-Grams → NLP Keywords → Skip-Gram → Auto-Suggest → Grammar → SEO Rules →
-AI Instructions → Review → Content Editor`
+`Competitor Research → Outline Creation → Word Count → Competitor Content →
+Entities → N-Grams → NLP Keywords → Skip-Gram Words → Auto-Suggest Keywords →
+Grammar Generator → SEO Rules → AI Instructions → Master Prompt →
+Content Editor`
 
 **Stages 6–8 call no model.** N-grams, TF-IDF salience and skip-grams are
 counted directly from the extracted competitor text. Asking an LLM to guess

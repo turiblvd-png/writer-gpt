@@ -8,7 +8,7 @@ import { storageStatus } from '@/lib/db/store';
  * better than letting someone build a 14-stage project that vanishes.
  */
 export function StorageBanner() {
-  const { mode, error } = storageStatus();
+  const { mode, error, perInstance } = storageStatus();
   if (mode === 'persistent') return null;
 
   return (
@@ -18,16 +18,19 @@ export function StorageBanner() {
       }`}
       role="status"
     >
-      <p className={`font-semibold ${mode === 'memory' ? 'text-bad' : 'text-warn'}`}>
-        {mode === 'memory' ? 'Storage unavailable, running in memory' : 'Temporary storage'}
+      <p className={`font-semibold ${perInstance ? 'text-bad' : 'text-warn'}`}>
+        {perInstance ? 'Saving will not work reliably on this host' : 'Temporary storage'}
       </p>
       <p className="mt-1 text-ink-2">
         {mode === 'memory'
-          ? 'The database could not be opened, so nothing is being saved at all.'
-          : 'This host only allows writes to a temporary directory, so saved articles and projects are lost whenever the server restarts.'}{' '}
-        The tools all work; the data is just not kept. For durable storage, deploy to a host with a persistent
-        volume and set <code className="rounded bg-surface-3 px-1 py-0.5 font-mono text-xs text-accent-2">DATABASE_PATH</code> to it,
-        or move the store to Postgres.
+          ? 'The data file could not be opened, so nothing is being saved at all.'
+          : perInstance
+            ? 'This host runs the app across separate instances that do not share a disk, so a project saved by one request can be invisible to the next. Creating a project may appear to fail even when it succeeded.'
+            : 'This host only allows writes to a temporary directory, so saved work is lost whenever the server restarts.'}{' '}
+        The writing tools themselves work. To save work reliably, deploy to a host with a persistent disk
+        (Railway, Render, Fly, or a VPS) and set{' '}
+        <code className="rounded bg-surface-3 px-1 py-0.5 font-mono text-xs text-accent-2">DATABASE_PATH</code> to a
+        mounted volume.
       </p>
       {error && <p className="mt-1.5 font-mono text-[11px] text-ink-3">{error}</p>}
     </div>

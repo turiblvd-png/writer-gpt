@@ -160,9 +160,43 @@ export function collection<T extends { id: string }>(name: string) {
   };
 }
 
-export function storageStatus(): { mode: StorageMode; path: string; error: string | null } {
+export function storageStatus(): {
+  mode: StorageMode;
+  path: string;
+  error: string | null;
+  /** True when each server instance keeps its own copy, so data is not shared. */
+  perInstance: boolean;
+} {
   load();
-  return { mode, path: mode === 'memory' ? 'memory only' : resolveDataFile(), error: storageError };
+  return {
+    mode,
+    path: mode === 'memory' ? 'memory only' : resolveDataFile(),
+    error: storageError,
+    // On a serverless host /tmp belongs to one lambda instance. A record written
+    // by one request is invisible to the next if it lands elsewhere, so the app
+    // is not merely losing data on restart, it is inconsistent between clicks.
+    perInstance: mode === 'memory' || (SERVERLESS && !process.env.DATABASE_PATH),
+  };
+}
+
+/**
+ * Round-trips a record through storage to prove writes actually work.
+ *
+ * Reading can succeed while writing fails, which is exactly what made "Create
+ * project" fail with an unexplained error while every page loaded fine.
+ */
+export function probeStorage(): { writable: boolean; error: string | null } {
+  const probe = collection<{ id: string; at: number }>('__probe');
+  try {
+    const id = `probe-${Date.now()}`;
+    probe.put({ id, at: Date.now() });
+    const readBack = probe.get(id);
+    probe.remove(id);
+    if (!readBack) return { writable: false, error: 'Write succeeded but the record could not be read back.' };
+    return { writable: mode !== 'memory', error: mode === 'memory' ? storageError : null };
+  } catch (err) {
+    return { writable: false, error: err instanceof Error ? err.message : String(err) };
+  }
 }
 
 /** Test seam: forget the loaded data so the next call re-reads from disk. */

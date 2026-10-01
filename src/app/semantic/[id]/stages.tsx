@@ -9,7 +9,7 @@ import {
   AutoSuggestStage, CorpusStats, EntitiesStage, NgramsStage, NlpKeywordsStage, SkipGramStage,
 } from './stages-semantic';
 import {
-  AiInstructionsStage, ContentEditorStage, GrammarStage, ReviewStage, SeoRulesStage,
+  AiInstructionsStage, ContentEditorStage, GrammarStage, MasterPromptStage, SeoRulesStage,
 } from './stages-output';
 
 /** Stages that read the measured corpus, so they show its size up front. */
@@ -54,7 +54,7 @@ function render(stepId: string, api: StageApi, onNavigate: (i: number) => void) 
     case 'grammar':             return <GrammarStage api={api} />;
     case 'seo-rules':           return <SeoRulesStage api={api} />;
     case 'ai-instructions':     return <AiInstructionsStage api={api} />;
-    case 'review':              return <ReviewStage api={api} onNavigate={onNavigate} />;
+    case 'master-prompt':       return <MasterPromptStage api={api} onNavigate={onNavigate} />;
     case 'content-editor':      return <ContentEditorStage api={api} />;
     default:                    return <Notice tone="warn">Unknown stage &ldquo;{stepId}&rdquo;.</Notice>;
   }

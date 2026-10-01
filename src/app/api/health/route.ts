@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { configuredProviders } from '@/lib/ai';
-import { storageStatus } from '@/lib/db/store';
+import { probeStorage, storageStatus } from '@/lib/db/store';
 import { STEPS } from '@/lib/semantic/steps';
 
 export const runtime = 'nodejs';
@@ -17,9 +17,14 @@ export async function GET() {
   // Never let a storage fault take down the one endpoint used to diagnose it.
   let storage;
   try {
-    storage = storageStatus();
+    // Probe an actual write: reads can succeed while writes fail, which is how
+    // "Create project" broke while every page rendered normally.
+    storage = { ...storageStatus(), ...probeStorage() };
   } catch (err) {
-    storage = { mode: 'memory', path: 'none', error: err instanceof Error ? err.message : String(err) };
+    storage = {
+      mode: 'memory', path: 'none', perInstance: true, writable: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
   }
 
   return NextResponse.json({

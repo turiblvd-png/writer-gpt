@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import type { Source } from '@/lib/ai';
-import { collection, resolveDataFile, storageStatus, type StorageMode } from './engine';
+import { collection, probeStorage, resolveDataFile, storageStatus, type StorageMode } from './engine';
 
-export { storageStatus, resolveDataFile, type StorageMode };
+export { storageStatus, probeStorage, resolveDataFile, type StorageMode };
 
 export interface ArticleRecord {
   id: string;

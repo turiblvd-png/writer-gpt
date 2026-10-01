@@ -136,63 +136,30 @@ export function SeoRulesStage({ api }: { api: StageApi }) {
 }
 
 export function AiInstructionsStage({ api }: { api: StageApi }) {
-  const { project, patch, runAction, busy } = api;
-  const [copied, setCopied] = useState(false);
-  const megaPrompt = project.data.megaPrompt;
+  const { project, patch } = api;
 
   return (
-    <>
-      <Panel icon={<IconEdit />} title="Your instructions" subtitle="Appended verbatim to the brief.">
-        <textarea
-          className="field min-h-[130px] resize-y"
-          value={project.data.aiInstructions}
-          onChange={(e) => void patch({ aiInstructions: e.target.value })}
-          placeholder="Angle to take, things to avoid, brand voice notes, anything the stages above cannot express…"
-          aria-label="AI instructions"
-        />
-      </Panel>
-
-      <Panel
-        icon={<IconTerminal />}
-        title="Mega prompt"
-        subtitle="Every stage compiled into the single brief the writer receives."
-        action={
-          <div className="flex shrink-0 gap-2">
-            {megaPrompt && (
-              <button
-                className="btn-ghost px-3 py-1.5 text-xs"
-                onClick={() => {
-                  void navigator.clipboard?.writeText(megaPrompt).then(() => {
-                    setCopied(true);
-                    setTimeout(() => setCopied(false), 1800);
-                  });
-                }}
-              >
-                {copied ? <><IconCheck className="h-3.5 w-3.5" /> Copied</> : <><IconCopy className="h-3.5 w-3.5" /> Copy</>}
-              </button>
-            )}
-            <button className="btn-primary px-3 py-1.5 text-xs" disabled={Boolean(busy)} onClick={() => runAction('compile-mega-prompt')}>
-              {busy === 'compile-mega-prompt' ? <Spinner className="h-3.5 w-3.5" /> : megaPrompt ? 'Recompile' : 'Compile'}
-            </button>
-          </div>
-        }
-      >
-        {megaPrompt ? (
-          <pre className="max-h-[520px] overflow-auto whitespace-pre-wrap rounded-xl bg-canvas p-4 font-mono text-[11px] leading-relaxed text-ink-2">
-            {megaPrompt}
-          </pre>
-        ) : (
-          <p className="text-sm text-ink-3">
-            Not compiled yet. Compile to see exactly what the writer will be told, nothing is hidden.
-          </p>
-        )}
-      </Panel>
-    </>
+    <Panel icon={<IconEdit />} title="Your instructions" subtitle="Appended to the master prompt, word for word.">
+      <textarea
+        className="field min-h-[180px] resize-y"
+        value={project.data.aiInstructions}
+        onChange={(e) => void patch({ aiInstructions: e.target.value })}
+        placeholder="Angle to take, things to avoid, brand voice notes, anything the stages above cannot express…"
+        aria-label="AI instructions"
+      />
+      <p className="mt-2 text-xs text-ink-3">
+        Optional. Everything measured in the earlier stages is already in the brief; this is for judgement the
+        tool cannot infer.
+      </p>
+    </Panel>
   );
 }
 
-export function ReviewStage({ api, onNavigate }: { api: StageApi; onNavigate: (i: number) => void }) {
+export function MasterPromptStage({ api, onNavigate }: { api: StageApi; onNavigate: (i: number) => void }) {
   const { project, runAction, busy } = api;
+  const [copied, setCopied] = useState(false);
+  const megaPrompt = project.data.megaPrompt;
+
   const summary = useMemo(() => reviewSummary(project), [project]);
   const { blocking, advisory } = useMemo(() => reviewWarnings(project), [project]);
   const generating = busy === 'generate-article';
@@ -224,16 +191,49 @@ export function ReviewStage({ api, onNavigate }: { api: StageApi; onNavigate: (i
         </dl>
       </Panel>
 
-      {blocking.map((w) => (
-        <Notice key={w} tone="bad">{w}</Notice>
-      ))}
-      {advisory.map((w) => (
-        <Notice key={w} tone="warn">{w}</Notice>
-      ))}
+      <Panel
+        icon={<IconTerminal />}
+        title="Master prompt"
+        subtitle="Every stage compiled into the single brief the writer receives."
+        action={
+          <div className="flex shrink-0 gap-2">
+            {megaPrompt && (
+              <button
+                className="btn-ghost px-3 py-1.5 text-xs"
+                onClick={() => {
+                  void navigator.clipboard?.writeText(megaPrompt).then(() => {
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 1800);
+                  });
+                }}
+              >
+                {copied ? <><IconCheck className="h-3.5 w-3.5" /> Copied</> : <><IconCopy className="h-3.5 w-3.5" /> Copy</>}
+              </button>
+            )}
+            <button className="btn-primary px-3 py-1.5 text-xs" disabled={Boolean(busy)} onClick={() => runAction('compile-mega-prompt')}>
+              {busy === 'compile-mega-prompt' ? <Spinner className="h-3.5 w-3.5" /> : megaPrompt ? 'Recompile' : 'Compile'}
+            </button>
+          </div>
+        }
+      >
+        {megaPrompt ? (
+          <pre className="max-h-[520px] overflow-auto whitespace-pre-wrap rounded-xl bg-canvas p-4 font-mono text-[11px] leading-relaxed text-ink-2">
+            {megaPrompt}
+          </pre>
+        ) : (
+          <p className="text-sm text-ink-3">
+            Not compiled yet. Compile to see exactly what the writer will be told; nothing is hidden.
+          </p>
+        )}
+      </Panel>
+
+      {blocking.map((w) => <Notice key={w} tone="bad">{w}</Notice>)}
+      {advisory.map((w) => <Notice key={w} tone="warn">{w}</Notice>)}
 
       {generating && (
         <Notice tone="info">
-          Researching, drafting, then fact-checking. This runs four model calls and usually takes one to three minutes.
+          Researching, drafting, checking for AI patterns, then fact-checking. That is several model calls and
+          usually takes one to three minutes.
         </Notice>
       )}
 

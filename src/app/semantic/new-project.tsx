@@ -26,6 +26,19 @@ export function NewProjectForm() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Could not create the project.');
+
+      // Confirm the project is readable before navigating. On a host that does
+      // not share storage between instances the write can succeed while the
+      // next request sees nothing, and landing on an empty page is far more
+      // confusing than being told what happened.
+      const check = await fetch(`/api/semantic/projects/${data.project.id}`, { cache: 'no-store' });
+      if (!check.ok) {
+        throw new Error(
+          'The project was created but could not be read back. This host does not share saved data between ' +
+          'server instances, so projects cannot be reopened. Deploy to a host with a persistent disk to fix this.',
+        );
+      }
+
       router.push(`/semantic/${data.project.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not create the project.');

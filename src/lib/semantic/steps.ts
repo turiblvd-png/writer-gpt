@@ -25,13 +25,13 @@ export const STEPS: StepDef[] = [
     whatIsThis:
       'Identify your main keyword and the top-ranking competitor URLs. The AI will analyze their content structure, topics, and SEO strategies to help you create superior content.',
     seoImpact:
-      'Understanding what ranks #1 lets you cover the same topics (and more), signaling topical authority to Google. This is the foundation — every subsequent step builds on these competitors.',
+      'Understanding what ranks #1 lets you cover the same topics (and more), signaling topical authority to Google. This is the foundation: every subsequent step builds on these competitors.',
     isComplete: (d) => d.competitors.length > 0,
   },
   {
     id: 'outline',
-    label: 'Outline',
-    title: 'Outline Extraction',
+    label: 'Outline Creation',
+    title: 'Outline Creation',
     whatIsThis:
       'Extract the heading structure (H1–H6) from each competitor page. This reveals how top-ranking articles organize their content and which subtopics they cover.',
     seoImpact:
@@ -85,17 +85,17 @@ export const STEPS: StepDef[] = [
     label: 'NLP Keywords',
     title: 'NLP Keyword Salience',
     whatIsThis:
-      'Terms ranked by salience — how distinctive each one is to this topic, measured with TF-IDF against the competitor corpus rather than raw frequency.',
+      'Terms ranked by salience, how distinctive each one is to this topic, measured with TF-IDF against the competitor corpus rather than raw frequency.',
     seoImpact:
       "Google's natural language API scores entity salience to decide what a page is primarily about. Covering high-salience terms concentrates topical focus instead of diluting it across generic words.",
     isComplete: (d) => d.nlpKeywords.length > 0,
   },
   {
     id: 'skip-gram',
-    label: 'Skip-Gram',
-    title: 'Skip-Gram Co-occurrence',
+    label: 'Skip-Gram Words',
+    title: 'Skip-Gram Words',
     whatIsThis:
-      'Word pairs that repeatedly appear near each other without being adjacent — for example "semantic … optimisation". These capture relationships that plain n-grams miss.',
+      'Word pairs that repeatedly appear near each other without being adjacent, for example "semantic … optimisation". These capture relationships that plain n-grams miss.',
     seoImpact:
       'Embedding models learn meaning from co-occurrence. Reproducing the co-occurrence patterns of ranking pages places your document nearer them in vector space, which is what retrieval actually compares.',
     optional: true,
@@ -103,18 +103,18 @@ export const STEPS: StepDef[] = [
   },
   {
     id: 'auto-suggest',
-    label: 'Auto-Suggest',
-    title: 'Questions & Auto-Suggest',
+    label: 'Auto-Suggest Keywords',
+    title: 'Auto-Suggest Keywords',
     whatIsThis:
-      'The questions real people ask around this keyword — autocomplete continuations and People Also Ask style queries. Select the ones worth answering.',
+      'The questions real people ask around this keyword, autocomplete continuations and People Also Ask style queries. Select the ones worth answering.',
     seoImpact:
       'Answering a question directly, in its own heading, is how a page wins featured snippets and gets cited in AI Overviews. Each selected question becomes a heading in the brief.',
     isComplete: (d) => d.autoSuggest.length > 0,
   },
   {
     id: 'grammar',
-    label: 'Grammar',
-    title: 'Grammar & Style Rules',
+    label: 'Grammar Generator',
+    title: 'Grammar Generator',
     whatIsThis:
       'Tone, point of view, reading level, and a blocklist of phrases the writer must never use. The blocklist is what keeps output from reading like generic AI copy.',
     seoImpact:
@@ -136,22 +136,22 @@ export const STEPS: StepDef[] = [
   {
     id: 'ai-instructions',
     label: 'AI Instructions',
-    title: 'AI Instructions & Mega Prompt',
+    title: 'AI Instructions',
     whatIsThis:
-      'Your own instructions, plus the assembled mega prompt — every entity, phrase, question and rule from the previous stages compiled into the single brief the writer receives.',
+      'Your own instructions for the writer: the angle to take, things to avoid, brand voice notes, anything the earlier stages cannot express.',
     seoImpact:
-      'The mega prompt is what separates this from one-shot generation. The model writes against gathered evidence and explicit coverage targets instead of from memory.',
+      'The stages above supply evidence and targets. This is where you supply judgement, which is what separates an article that covers the topic from one worth reading.',
     optional: true,
     isComplete: () => true,
   },
   {
-    id: 'review',
-    label: 'Review',
-    title: 'Review & Generate',
+    id: 'master-prompt',
+    label: 'Master Prompt',
+    title: 'Master Prompt',
     whatIsThis:
-      'A last look at coverage before spending the generation. Shows what each stage contributed and flags anything thin enough to hurt the result.',
+      'Every entity, phrase, question and rule from the previous stages compiled into the single brief the writer receives. Shown in full, then generated from.',
     seoImpact:
-      'Generating from an incomplete brief wastes the run. Catching a missing entity set here costs nothing; catching it after a 2,000-word draft costs a full regeneration.',
+      'The master prompt is what separates this from one-shot generation. The model writes against gathered evidence and explicit coverage targets instead of from memory.',
     isComplete: (d) => Boolean(d.article),
   },
   {
@@ -159,7 +159,7 @@ export const STEPS: StepDef[] = [
     label: 'Content Editor',
     title: 'Content Editor',
     whatIsThis:
-      'The finished article with live scoring — entity coverage, keyword density, readability and the SEO assessments, recalculated as you edit.',
+      'The finished article with live scoring, entity coverage, keyword density, readability and the SEO assessments, recalculated as you edit.',
     seoImpact:
       'Scoring against the brief you built means coverage gaps are visible while you can still fix them, rather than after publishing.',
     isComplete: (d) => Boolean(d.article?.markdown),
