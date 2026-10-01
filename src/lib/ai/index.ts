@@ -149,7 +149,16 @@ async function attempt(binding: RoleBinding, req: CompletionRequest, retries: nu
  * fails outright (bad key, no quota, outage) hands over to the next provider in
  * the dashboard's fallback order, so one broken key does not stop the product.
  */
-export async function complete(role: ModelRole, req: CompletionRequest, opts: { retries?: number } = {}): Promise<CompletionResult> {
+export interface CompleteOptions {
+  retries?: number;
+  /**
+   * Try this provider first when it has a key, whatever the role's dashboard
+   * choice. The others still stand behind it as fallbacks.
+   */
+  prefer?: ProviderId;
+}
+
+export async function complete(role: ModelRole, req: CompletionRequest, opts: CompleteOptions = {}): Promise<CompletionResult> {
   const started = Date.now();
   const retries = opts.retries ?? 3;
 
@@ -161,7 +170,10 @@ export async function complete(role: ModelRole, req: CompletionRequest, opts: { 
   }
 
   const settings = await getAiSettings();
-  const primary = await resolveBinding(role);
+  let primary = await resolveBinding(role);
+  if (opts.prefer && primary.provider !== opts.prefer && !req.grounded && (await apiKeyFor(opts.prefer)).key) {
+    primary = { provider: opts.prefer, model: await preferredModel(opts.prefer, role, settings), source: 'default' };
+  }
 
   const candidates: { binding: RoleBinding; chosen: boolean }[] = [{ binding: primary, chosen: true }];
   for (const p of settings.fallbackOrder) {
@@ -219,6 +231,14 @@ export async function complete(role: ModelRole, req: CompletionRequest, opts: { 
     provider: primary.provider, model: primary.model, ms: Date.now() - started, error: error.message,
   });
   throw await forViewer(error);
+}
+
+/** The model a preferred provider uses: the dashboard's pick for that provider if any, else its default. */
+async function preferredModel(provider: ProviderId, role: ModelRole, settings: Awaited<ReturnType<typeof getAiSettings>>): Promise<string> {
+  const own = settings.roles[role];
+  if (own?.provider === provider) return own.model;
+  const any = Object.values(settings.roles).find((b) => b?.provider === provider);
+  return any?.model ?? DEFAULT_MODELS[provider][role];
 }
 
 function sleep(ms: number) {

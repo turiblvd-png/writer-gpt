@@ -283,9 +283,19 @@ export interface GenerateProgress {
 
 // ── Parallel writing ────────────────────────────────────────────────────────
 
+/**
+ * The provider that writes articles. DeepSeek is fast, cheap and has no daily
+ * free-tier cap, so the whole article flow tries it first; the others stay
+ * behind it as fallbacks. Live web search still needs Gemini.
+ */
+export const ARTICLE_PROVIDER = 'deepseek' as const;
+const WRITER = { prefer: ARTICLE_PROVIDER };
+
 /** Time one part request may spend before it must save; the host stops it at 300 s. */
 const PART_WRITE_MS = 150_000;
 const PART_BUDGET_MS = 230_000;
+/** A part is repaired only below this human score: a second call doubles its time. */
+const STYLE_THRESHOLD = 60;
 
 /**
  * Writes one part of the article. The client sends every part at once, so the
@@ -314,8 +324,9 @@ export async function writeArticlePart(id: string, runId: string, index: number)
         temperature: 0.7,
         maxOutputTokens: Math.min(8000, Math.ceil(part.words * 3) + 1500),
         signal: AbortSignal.timeout(Math.max(30_000, PART_WRITE_MS - (Date.now() - started))),
+        fast: true,
       },
-      { retries: 1 },
+      { retries: 1, ...WRITER },
     );
 
   let fixed = fixPartHeadings(sanitizeDraft(stripFences((await write()).text)).text, part);
@@ -331,14 +342,16 @@ export async function writeArticlePart(id: string, runId: string, index: number)
   }
   let text = splitLongParagraphs(fixed.markdown);
 
-  if (detectTells(text).humanScore < 70 && Date.now() - started < PART_BUDGET_MS - 90_000) {
+  if (detectTells(text).humanScore < STYLE_THRESHOLD && Date.now() - started < PART_BUDGET_MS - 90_000) {
     try {
       const enforced = await enforceStyle(text, {
         clock,
         language: project.language,
         maxRounds: 1,
-        threshold: 70,
+        threshold: STYLE_THRESHOLD,
         signal: AbortSignal.timeout(PART_BUDGET_MS - (Date.now() - started)),
+        fast: true,
+        ...WRITER,
       });
       const repaired = fixPartHeadings(enforced.markdown, part);
       if (repaired.matched || !fixed.matched) text = splitLongParagraphs(repaired.markdown);
@@ -524,10 +537,10 @@ export async function finishArticle(id: string, onProgress?: GenerateProgress): 
   onProgress?.('finish', 'Writing metadata and fact-checking…');
 
   const [meta, check] = await Promise.allSettled([
-    complete('structure', { prompt: P.metaPrompt(project, markdown, clock), json: true, temperature: 0.5, signal: AbortSignal.timeout(FINISH_MS) }, { retries: 1 }),
+    complete('structure', { prompt: P.metaPrompt(project, markdown, clock), json: true, temperature: 0.5, signal: AbortSignal.timeout(FINISH_MS), fast: true }, { retries: 1, ...WRITER }),
     // Checked against the fact sheet, not a fresh web search: fast, and it is
     // the sheet the article was required to stay within.
-    complete('structure', { prompt: P.verifyPrompt(markdown, factText, clock), json: true, temperature: 0.1, signal: AbortSignal.timeout(FINISH_MS) }, { retries: 1 }),
+    complete('structure', { prompt: P.verifyPrompt(markdown, factText, clock), json: true, temperature: 0.1, signal: AbortSignal.timeout(FINISH_MS), fast: true }, { retries: 1, ...WRITER }),
   ]);
 
   let { seoTitle, metaDescription, slug } = article;

@@ -159,8 +159,8 @@ export async function buildFactSheet(project: SemanticProject, clock: RunClock, 
 
   const res = await complete(
     'structure',
-    { prompt: structurePrompt(project, research, pages, clock, mode), json: true, temperature: 0.1, maxOutputTokens: 3000, signal: AbortSignal.timeout(STRUCTURE_BUDGET_MS) },
-    { retries: 1 },
+    { prompt: structurePrompt(project, research, pages, clock, mode), json: true, temperature: 0.1, maxOutputTokens: 3000, signal: AbortSignal.timeout(STRUCTURE_BUDGET_MS), fast: true },
+    { retries: 1, prefer: 'deepseek' },
   );
   return parseFactSheet(res.text, pages.map((p) => p.url), mode);
 }

@@ -6,7 +6,7 @@ import type { OutlineHeading, SemanticProject } from './types';
  * Splits the outline into parts that are written at the same time.
  *
  * One call for a whole article is slow (a 3,000-word answer takes minutes) and
- * fragile (one stall loses everything). Parts of about 550 words each come back
+ * fragile (one stall loses everything). Parts of about 420 words each come back
  * in well under a minute, run side by side, and save as they land, so the whole
  * article takes roughly as long as its slowest part.
  *
@@ -40,10 +40,10 @@ export interface PartPlan {
   key: string;
 }
 
-const PART_WORDS = 550;
-const MAX_H2_PER_PART = 3;
+const PART_WORDS = 420;
+const MAX_H2_PER_PART = 2;
 /** A single H2 bigger than this is split across parts at its H3s. */
-const SPLIT_BLOCK_WORDS = 800;
+const SPLIT_BLOCK_WORDS = 650;
 
 interface Block {
   headings: OutlineHeading[];

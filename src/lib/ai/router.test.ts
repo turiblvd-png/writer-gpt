@@ -176,3 +176,29 @@ describe('limits and activity', () => {
     expect(failed!.error).toMatch(/rejected/);
   });
 });
+
+describe('provider preference', () => {
+  it('sends article work to DeepSeek first even when the role is set to Gemini', async () => {
+    process.env.GEMINI_API_KEY = 'env-gemini';
+    process.env.DEEPSEEK_API_KEY = 'sk-env-deepseek';
+    process.env.MODEL_DRAFT = 'gemini:gemini-2.5-flash';
+    const { complete } = await import('./index');
+    const res = await complete('draft', { prompt: 'write' }, { prefer: 'deepseek' });
+    expect(res.provider).toBe('deepseek');
+    expect(calls.map((c) => c.provider)).toEqual(['deepseek']);
+  });
+
+  it('falls back to Gemini when DeepSeek fails, and ignores the preference without a key', async () => {
+    process.env.GEMINI_API_KEY = 'env-gemini';
+    process.env.DEEPSEEK_API_KEY = 'sk-env-deepseek';
+    behaviour.deepseek = () => new Error('DeepSeek is having trouble (HTTP 503).');
+    const { complete } = await import('./index');
+    expect((await complete('draft', { prompt: 'write' }, { prefer: 'deepseek', retries: 0 })).provider).toBe('gemini');
+
+    delete process.env.DEEPSEEK_API_KEY;
+    calls.length = 0;
+    vi.resetModules();
+    const again = await import('./index');
+    expect((await again.complete('draft', { prompt: 'write' }, { prefer: 'deepseek' })).provider).toBe('gemini');
+  });
+});

@@ -1,4 +1,4 @@
-import { complete, type ModelRole } from '@/lib/ai';
+import { complete, type ModelRole, type ProviderId } from '@/lib/ai';
 import type { RunClock } from '@/lib/pipeline/types';
 import { detectTells, tellsAsInstructions, type StyleReport } from './detect';
 import { sanitizeDraft } from './sanitize';
@@ -18,6 +18,10 @@ export interface EnforceOptions {
   clock: RunClock;
   language: string;
   role?: ModelRole;
+  /** Provider to try first, see complete(). */
+  prefer?: ProviderId;
+  /** Skip the provider's reasoning pass, for speed. */
+  fast?: boolean;
   /** Repair below this human score. 100 would loop forever on fine prose. */
   threshold?: number;
   /** Repair rounds to attempt. Each one costs a model call. */
@@ -57,7 +61,8 @@ export async function enforceStyle(input: string, opts: EnforceOptions): Promise
       temperature: 0.75,
       maxOutputTokens: Math.min(32000, Math.ceil(current.words * 3) + 1200),
       signal: opts.signal,
-    });
+      fast: opts.fast,
+    }, { prefer: opts.prefer });
 
     const repaired = sanitizeDraft(res.text).text;
     const next = detectTells(repaired);

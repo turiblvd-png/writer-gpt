@@ -272,6 +272,9 @@ export class OpenAiCompatProvider implements LlmProvider {
     if (!apiKey) throw new ProviderNotConfiguredError(id, envVar);
   }
 
+  /** Set once the API refuses the thinking switch, so it is not sent again. */
+  private static thinkingSwitchRejected = false;
+
   async complete(req: CompletionRequest): Promise<CompletionResult> {
     if (req.grounded) throw new GroundingUnsupportedError(this.id);
 
@@ -281,64 +284,94 @@ export class OpenAiCompatProvider implements LlmProvider {
     ];
 
     const name = this.id === 'deepseek' ? 'DeepSeek' : 'Grok';
-    let res: Response;
-    try {
-      res = await fetch(`${this.baseUrl}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.apiKey}`,
+    const deepseek = this.id === 'deepseek';
+    const signal = req.signal ? AbortSignal.any([req.signal, AbortSignal.timeout(TIMEOUT_MS)]) : AbortSignal.timeout(TIMEOUT_MS);
+
+    const send = async (maxTokens: number | undefined, thinkingOff: boolean) => {
+      let res: Response;
+      try {
+        res = await fetch(`${this.baseUrl}/chat/completions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${this.apiKey}`,
+          },
+          body: JSON.stringify({
+            model: this.model,
+            messages,
+            temperature: req.temperature ?? 0.7,
+            max_tokens: maxTokens,
+            // Writing does not need a reasoning pass, and skipping it answers
+            // several times faster.
+            ...(thinkingOff ? { thinking: { type: 'disabled' } } : {}),
+            ...(req.json ? { response_format: { type: 'json_object' } } : {}),
+          }),
+          // A hung call must not eat the whole request's time budget.
+          signal,
+        });
+      } catch (err) {
+        if (req.signal?.aborted) throw err;
+        const timedOut = err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError');
+        // "timeout" and "unavailable" let the router retry once, then fall back.
+        throw new Error(timedOut
+          ? `${name} did not answer within ${Math.round(TIMEOUT_MS / 1000)} seconds (timeout).`
+          : `Could not reach ${name} (network error, service unavailable). Retry in a moment.`);
+      }
+      return res;
+    };
+
+    // DeepSeek's thinking mode spends the output cap on reasoning before it
+    // writes, so a cap sized for the answer alone came back empty. The cap is
+    // a ceiling, not a charge, so a generous floor costs nothing extra.
+    let maxTokens = deepseek ? Math.max(req.maxOutputTokens ?? 0, DEEPSEEK_MIN_TOKENS) : req.maxOutputTokens;
+    let thinkingOff = deepseek && Boolean(req.fast) && !OpenAiCompatProvider.thinkingSwitchRejected;
+
+    for (let attempt = 0; ; attempt++) {
+      const res = await send(maxTokens, thinkingOff);
+      if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        // An API version without the switch: drop it and ask again.
+        if (thinkingOff && res.status === 400 && /thinking/i.test(body)) {
+          OpenAiCompatProvider.thinkingSwitchRejected = true;
+          thinkingOff = false;
+          continue;
+        }
+        throw explainCompatError(this.id, this.model, res.status, body);
+      }
+
+      const data = (await res.json()) as {
+        choices?: { message?: { content?: string; reasoning_content?: string }; finish_reason?: string }[];
+        usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
+      };
+      const choice = data.choices?.[0];
+      const text = choice?.message?.content ?? '';
+      if (!text.trim()) {
+        // Ran out of room while thinking: once more with the full allowance.
+        if (attempt === 0 && deepseek) {
+          maxTokens = DEEPSEEK_MAX_TOKENS;
+          continue;
+        }
+        throw new Error(`${name} returned an empty answer${choice?.finish_reason ? ` (${choice.finish_reason})` : ''}; the service may be overloaded or unavailable.`);
+      }
+
+      return {
+        text,
+        sources: [],
+        searchQueries: [],
+        usage: {
+          input: data.usage?.prompt_tokens ?? 0,
+          output: data.usage?.completion_tokens ?? 0,
+          total: data.usage?.total_tokens ?? 0,
         },
-        body: JSON.stringify({
-          model: this.model,
-          messages,
-          temperature: req.temperature ?? 0.7,
-          // DeepSeek's default output cap is small, and its thinking mode spends
-          // part of the cap on reasoning, which cut long articles off
-          // mid-section. Current models allow up to 384K; 32K leaves room for
-          // thinking plus a long draft without inviting runaway bills.
-          max_tokens: req.maxOutputTokens ?? (this.id === 'deepseek' ? 32_768 : undefined),
-          ...(req.json ? { response_format: { type: 'json_object' } } : {}),
-        }),
-        // A hung call must not eat the whole request's time budget.
-        signal: req.signal ? AbortSignal.any([req.signal, AbortSignal.timeout(TIMEOUT_MS)]) : AbortSignal.timeout(TIMEOUT_MS),
-      });
-    } catch (err) {
-      if (req.signal?.aborted) throw err;
-      const timedOut = err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError');
-      // "timeout" and "unavailable" let the router retry once, then fall back.
-      throw new Error(timedOut
-        ? `${name} did not answer within ${Math.round(TIMEOUT_MS / 1000)} seconds (timeout).`
-        : `Could not reach ${name} (network error, service unavailable). Retry in a moment.`);
+        model: this.model,
+        provider: this.id,
+      };
     }
-
-    if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      throw explainCompatError(this.id, this.model, res.status, body);
-    }
-
-    const data = (await res.json()) as {
-      choices?: { message?: { content?: string } }[];
-      usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
-    };
-    const text = data.choices?.[0]?.message?.content ?? '';
-    if (!text.trim()) throw new Error(`${this.id} returned an empty response.`);
-
-    return {
-      text,
-      sources: [],
-      searchQueries: [],
-      usage: {
-        input: data.usage?.prompt_tokens ?? 0,
-        output: data.usage?.completion_tokens ?? 0,
-        total: data.usage?.total_tokens ?? 0,
-      },
-      model: this.model,
-      provider: this.id,
-    };
   }
 }
 
+const DEEPSEEK_MIN_TOKENS = 16_384;
+const DEEPSEEK_MAX_TOKENS = 32_768;
 const TIMEOUT_MS = Number(process.env.GEMINI_TIMEOUT_MS) || 240_000;
 
 /** DeepSeek and xAI errors in words a site owner can act on. */

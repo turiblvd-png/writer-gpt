@@ -162,7 +162,7 @@ export function AiInstructionsStage({ api }: { api: StageApi }) {
 }
 
 /** How many parts are written at once. Each is its own request. */
-const CONCURRENCY = 6;
+const CONCURRENCY = 10;
 
 type Flow = { label: string; done: number; total: number; startedAt: number };
 

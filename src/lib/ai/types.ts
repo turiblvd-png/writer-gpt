@@ -44,6 +44,8 @@ export interface CompletionRequest {
   signal?: AbortSignal;
   /** Use exactly this model: no quota step-down. For the dashboard's key test. */
   exact?: boolean;
+  /** Skip a reasoning pass where the provider allows it. For prose, where speed matters more. */
+  fast?: boolean;
 }
 
 export interface CompletionResult {
