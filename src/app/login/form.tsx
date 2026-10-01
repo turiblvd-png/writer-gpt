@@ -1,5 +1,6 @@
 'use client';
 
+import { readJson } from '@/lib/http/read-json';
 import { useState } from 'react';
 import Link from 'next/link';
 
@@ -33,7 +34,7 @@ export function AuthForm({ mode: initialMode, next }: { mode: 'login' | 'signup'
       window.location.assign(next);
       return;
     }
-    const data = await res.json().catch(() => ({}));
+    const data = await readJson(res);
     if (res.status === 403 && /setup code/i.test(data.error ?? '')) setShowSetup(true);
     setError(data.error ?? `Something went wrong on the server (HTTP ${res.status}). Try again in a minute.`);
     setBusy(false);

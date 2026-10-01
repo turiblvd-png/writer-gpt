@@ -1,5 +1,6 @@
 'use client';
 
+import { readJson } from '@/lib/http/read-json';
 import { useState } from 'react';
 import { Notice } from '@/components/semantic-ui';
 
@@ -13,7 +14,7 @@ export function PasswordForm() {
     const res = await fetch('/api/account/password', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ current, next }),
     });
-    const data = await res.json().catch(() => ({}));
+    const data = await readJson(res);
     setMsg(res.ok ? { tone: 'ok', text: 'Password changed.' } : { tone: 'bad', text: data.error ?? 'Could not change it.' });
     if (res.ok) { setCurrent(''); setNext(''); }
   }

@@ -1,5 +1,6 @@
 'use client';
 
+import { readJson } from '@/lib/http/read-json';
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import type { Difficulty, Intent, KeywordResearch } from '@/lib/keywords/research';
@@ -34,7 +35,7 @@ export function KeywordWorkspace({ initialHistory }: { initialHistory: KeywordRe
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ keywords: terms, language }),
     });
-    const data = await res.json().catch(() => ({}));
+    const data = await readJson(res);
     setQueued(res.ok ? `${data.added.length} added to Autopilot` : data.error ?? 'Could not queue.');
   }
 
@@ -47,7 +48,7 @@ export function KeywordWorkspace({ initialHistory }: { initialHistory: KeywordRe
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ seed, location, language }),
       });
-      const data = await res.json();
+      const data = await readJson(res);
       if (!res.ok) throw new Error(data.error ?? 'Research failed.');
       setCurrent(data.research);
       setHistory((h) => [data.research, ...h]);

@@ -1,5 +1,6 @@
 'use client';
 
+import { readJson } from '@/lib/http/read-json';
 import { useState } from 'react';
 import Link from 'next/link';
 import type { WpConfigView } from '@/lib/publishing/wordpress';
@@ -33,7 +34,7 @@ export function PublishingWorkspace({ initialConfig, articles: initialArticles }
       const res = await fetch('/api/publishing/wordpress', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form),
       });
-      const data = await res.json();
+      const data = await readJson(res);
       if (!res.ok) throw new Error(data.error ?? 'Could not connect.');
       setConfig(data.wordpress);
       setForm((f) => ({ ...f, appPassword: '' }));
@@ -46,7 +47,7 @@ export function PublishingWorkspace({ initialConfig, articles: initialArticles }
   }
 
   async function disconnect() {
-    const data = await fetch('/api/publishing/wordpress', { method: 'DELETE' }).then((r) => r.json());
+    const data = await fetch('/api/publishing/wordpress', { method: 'DELETE' }).then(readJson);
     setConfig(data.wordpress);
     setMessage(null);
   }
@@ -60,7 +61,7 @@ export function PublishingWorkspace({ initialConfig, articles: initialArticles }
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ articleId: id, status, date: status === 'future' && date ? new Date(date).toISOString() : undefined }),
       });
-      const data = await res.json();
+      const data = await readJson(res);
       if (!res.ok) throw new Error(data.error ?? 'Publishing failed.');
       setArticles((list) => list.map((a) => (a.id === id
         ? { ...a, status: data.article.status, publishedUrl: data.link, wpPostId: data.postId }

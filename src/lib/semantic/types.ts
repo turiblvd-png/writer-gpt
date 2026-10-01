@@ -102,6 +102,12 @@ export interface ArticleOutput {
   quality?: QualityReport;
   /** Suggested alt text for the article's images. */
   altTexts?: string[];
+  /**
+   * How far the article has got. Writing runs as separate requests (each well
+   * inside the host's time limit) and each step saves, so a failure part-way
+   * keeps the work and the next step can resume from here.
+   */
+  stage?: 'draft' | 'polished' | 'revised' | 'done';
 }
 
 export type FactStatus = 'confirmed' | 'reported' | 'conflicting' | 'unconfirmed';

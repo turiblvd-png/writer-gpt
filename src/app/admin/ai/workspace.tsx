@@ -1,5 +1,6 @@
 'use client';
 
+import { readJson } from '@/lib/http/read-json';
 import { useEffect, useState } from 'react';
 import type { AiAdminView } from '@/lib/ai/admin-view';
 import type { ProviderId } from '@/lib/ai/types';
@@ -35,7 +36,7 @@ interface TestResult {
 
 async function api<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, { ...init, headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) } });
-  const data = await res.json().catch(() => ({}));
+  const data = await readJson(res);
   if (!res.ok) throw new Error(data.error ?? `Request failed (HTTP ${res.status}).`);
   return data as T;
 }

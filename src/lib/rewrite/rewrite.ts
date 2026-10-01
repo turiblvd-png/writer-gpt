@@ -112,6 +112,8 @@ export async function rewriteFromUrl(
   const enforced = await enforceStyle(markdown, {
     clock,
     language,
+    // One round keeps the whole job inside the host's 5-minute request limit.
+    maxRounds: 1,
     signal: opts.signal,
     onProgress: opts.onProgress,
   });

@@ -158,6 +158,14 @@ export function AiInstructionsStage({ api }: { api: StageApi }) {
   );
 }
 
+/** The article steps, each one request. `after` is the stage saved before it runs. */
+const ARTICLE_FLOW = [
+  { action: 'write-draft', label: 'Writing the draft', after: undefined },
+  { action: 'polish-article', label: 'Removing AI writing patterns', after: 'draft' },
+  { action: 'revise-article', label: 'Checking the brief and fixing gaps', after: 'polished' },
+  { action: 'finish-article', label: 'Metadata and fact check', after: 'revised' },
+] as const;
+
 export function MasterPromptStage({ api, onNavigate }: { api: StageApi; onNavigate: (i: number) => void }) {
   const { project, runAction, busy } = api;
   const [copied, setCopied] = useState(false);
@@ -166,7 +174,24 @@ export function MasterPromptStage({ api, onNavigate }: { api: StageApi; onNaviga
   const summary = useMemo(() => reviewSummary(project), [project]);
   const { blocking, advisory } = useMemo(() => reviewWarnings(project), [project]);
   const budget = useMemo(() => lengthBudget(plannedOutline(project), project.data.wordCount.target), [project]);
-  const generating = busy === 'generate-article';
+  const running = ARTICLE_FLOW.some((f) => f.action === busy);
+  const stage = project.data.article?.stage;
+  // An article left part-way (a step failed or the tab closed) resumes at the next step.
+  const resumeFrom = stage && stage !== 'done' ? ARTICLE_FLOW.findIndex((f) => f.after === stage) : -1;
+
+  /**
+   * Runs the article steps as separate requests, each well inside the host's
+   * time limit. Facts are researched first when missing.
+   */
+  async function runFlow(from: number) {
+    if (from === 0 && !project.data.facts?.facts.length) {
+      if (!(await runAction('research-facts'))) return;
+    }
+    for (const step of ARTICLE_FLOW.slice(from)) {
+      if (!(await runAction(step.action))) return;
+    }
+    onNavigate(STEPS.length - 1);
+  }
 
   const rows: [string, string | number][] = [
     ['Competitors', summary.competitors],
@@ -245,22 +270,28 @@ export function MasterPromptStage({ api, onNavigate }: { api: StageApi; onNaviga
       {blocking.map((w) => <Notice key={w} tone="bad">{w}</Notice>)}
       {advisory.map((w) => <Notice key={w} tone="warn">{w}</Notice>)}
 
-      {generating && (
+      {running && (
         <Notice tone="info">
-          Researching, drafting, checking for AI patterns, then fact-checking. That is several model calls and
-          usually takes one to three minutes.
+          <span className="font-semibold">Step {Math.max(1, ARTICLE_FLOW.findIndex((f) => f.action === busy) + 1)} of {ARTICLE_FLOW.length}:</span>{' '}
+          {ARTICLE_FLOW.find((f) => f.action === busy)?.label ?? 'Working'}. Each step saves as it finishes, so nothing is lost if one fails.
+        </Notice>
+      )}
+
+      {!running && resumeFrom > 0 && (
+        <Notice tone="warn">
+          The last run stopped after &ldquo;{ARTICLE_FLOW[resumeFrom - 1]!.label.toLowerCase()}&rdquo;. The draft so far is saved in the Content Editor.{' '}
+          <button className="font-semibold text-accent underline" onClick={() => void runFlow(resumeFrom)}>
+            Continue from &ldquo;{ARTICLE_FLOW[resumeFrom]!.label.toLowerCase()}&rdquo;
+          </button>
         </Notice>
       )}
 
       <button
         className="btn-primary w-full py-4 text-base"
         disabled={Boolean(busy) || blocking.length > 0}
-        onClick={async () => {
-          const ok = await runAction('generate-article');
-          if (ok) onNavigate(STEPS.length - 1);
-        }}
+        onClick={() => void runFlow(0)}
       >
-        {generating ? <><Spinner /> Writing the article…</> : <><IconSpark className="h-5 w-5" /> Generate article</>}
+        {running ? <><Spinner /> Writing the article…</> : <><IconSpark className="h-5 w-5" /> {project.data.article ? 'Generate a new article' : 'Generate article'}</>}
       </button>
 
       {blocking.length > 0 && (

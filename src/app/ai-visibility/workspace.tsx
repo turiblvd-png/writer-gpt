@@ -1,5 +1,6 @@
 'use client';
 
+import { readJson } from '@/lib/http/read-json';
 import { useState } from 'react';
 import type { VisibilityCheck } from '@/lib/visibility/check';
 import { Notice, Panel, Spinner, StatTile } from '@/components/semantic-ui';
@@ -28,7 +29,7 @@ export function VisibilityWorkspace({ initialHistory }: { initialHistory: Visibi
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ topic, brand }),
       });
-      const data = await res.json();
+      const data = await readJson(res);
       if (!res.ok) throw new Error(data.error ?? 'Could not suggest queries.');
       setQueries((data.queries as string[]).join('\n'));
     } catch (err) {
@@ -46,7 +47,7 @@ export function VisibilityWorkspace({ initialHistory }: { initialHistory: Visibi
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ domain, brand, queries: list }),
       });
-      const data = await res.json();
+      const data = await readJson(res);
       if (!res.ok) throw new Error(data.error ?? 'Check failed.');
       setCurrent(data.check);
       setHistory((h) => [data.check, ...h]);

@@ -1,5 +1,6 @@
 'use client';
 
+import { readJson } from '@/lib/http/read-json';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { IconPlus } from '@/components/icons';
@@ -24,7 +25,7 @@ export function NewProjectForm({ initialKeyword = '' }: { initialKeyword?: strin
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: name.trim() || mainKeyword.trim(), mainKeyword, language }),
       });
-      const data = await res.json();
+      const data = await readJson(res);
       if (!res.ok) throw new Error(data.error ?? 'Could not create the project.');
 
       // Confirm the project is readable before navigating. On a host that does

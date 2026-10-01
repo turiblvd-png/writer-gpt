@@ -1,5 +1,6 @@
 'use client';
 
+import { readJson } from '@/lib/http/read-json';
 import { useMemo, useState } from 'react';
 import { Notice, Panel, Spinner, StatTile } from '@/components/semantic-ui';
 import { IconAlert, IconCheck, IconCopy, IconDoc, IconRefresh, IconSearch, IconTrash, IconWand } from '@/components/icons';
@@ -54,7 +55,7 @@ export function HumanizerWorkspace({
           mode, language, title: title.trim() || undefined,
         }),
       });
-      const data = await res.json();
+      const data = await readJson(res);
       if (!res.ok) throw new Error(data.error ?? 'Humanization failed.');
 
       setResult(data.article);

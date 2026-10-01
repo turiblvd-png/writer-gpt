@@ -1,5 +1,6 @@
 'use client';
 
+import { readJson } from '@/lib/http/read-json';
 import { useState } from 'react';
 import type { Limits } from '@/lib/usage/limits';
 import { Notice, Panel, Spinner } from '@/components/semantic-ui';
@@ -33,7 +34,7 @@ export function LimitsWorkspace({ initial, spendUsd }: { initial: Limits; spendU
       }),
     });
     setSaving(false);
-    setMsg(res.ok ? { tone: 'ok', text: 'Limits saved. They apply to the next request.' } : { tone: 'bad', text: (await res.json().catch(() => ({}))).error ?? 'Could not save.' });
+    setMsg(res.ok ? { tone: 'ok', text: 'Limits saved. They apply to the next request.' } : { tone: 'bad', text: (await readJson(res)).error ?? 'Could not save.' });
   }
 
   return (

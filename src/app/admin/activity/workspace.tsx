@@ -1,5 +1,6 @@
 'use client';
 
+import { readJson } from '@/lib/http/read-json';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ActivityEvent } from '@/lib/activity/log';
 import { Spinner, StatTile } from '@/components/semantic-ui';
@@ -43,7 +44,7 @@ export function ActivityWorkspace({ initial, users }: { initial: ActivityEvent[]
     if (status) q.set('ok', status);
     if (userId) q.set('userId', userId);
     if (before) q.set('before', String(before));
-    return fetch(`/api/admin/activity?${q}`).then((r) => r.json()).then((d) => (d.events ?? []) as ActivityEvent[]);
+    return fetch(`/api/admin/activity?${q}`).then(readJson).then((d) => (d.events ?? []) as ActivityEvent[]);
   }, [kind, status, userId]);
 
   const refresh = useCallback(async () => {

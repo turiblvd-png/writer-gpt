@@ -1,5 +1,6 @@
 'use client';
 
+import { readJson } from '@/lib/http/read-json';
 import { useCallback, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { STEPS } from '@/lib/semantic/steps';
@@ -36,8 +37,8 @@ export function Workspace({ initial }: { initial: SemanticProject }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ data }),
       });
-      if (!res.ok) throw new Error((await res.json()).error ?? 'Could not save.');
-      const { project: saved } = await res.json();
+      if (!res.ok) throw new Error((await readJson(res)).error ?? 'Could not save.');
+      const { project: saved } = await readJson(res);
       // Adopt the server copy so a concurrent action's result is not lost.
       setProject(saved);
     } catch (err) {
@@ -54,7 +55,7 @@ export function Workspace({ initial }: { initial: SemanticProject }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action, ...body }),
       });
-      const data = await res.json();
+      const data = await readJson(res);
       if (!res.ok) throw new Error(data.error ?? 'Action failed.');
       setProject(data.project);
       return true;

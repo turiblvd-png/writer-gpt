@@ -239,7 +239,7 @@ type PgPool = import('pg').Pool;
  * other serverless Postgres close idle connections when they scale to zero, so
  * the first query after a quiet spell can land on a dead socket.
  */
-const CONNECTION_LOST = /Connection terminated|ECONNRESET|EPIPE|terminating connection|connection error|Client was closed|timeout exceeded when trying to connect/i;
+const CONNECTION_LOST = /Connection terminated|ECONNRESET|ECONNREFUSED|EPIPE|terminating connection|connection error|Client was closed|timeout exceeded when trying to connect/i;
 
 export function isConnectionLost(err: unknown): boolean {
   return CONNECTION_LOST.test(message(err));

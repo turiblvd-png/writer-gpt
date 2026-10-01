@@ -128,6 +128,8 @@ export const generateContentPipeline: Pipeline<GenerateState> = {
         const enforced = await enforceStyle(stripFences(res.text), {
           clock: ctx.clock,
           language: input.language,
+          // One round keeps the whole job inside the host's 5-minute request limit.
+          maxRounds: 1,
           signal: ctx.signal,
           onProgress: (m) => ctx.log(m),
         });

@@ -36,7 +36,7 @@ export class GeminiProvider implements LlmProvider {
         ...(process.env.GEMINI_BASE_URL ? { baseUrl: process.env.GEMINI_BASE_URL } : {}),
         // One hung call must not consume the whole request's time budget; the
         // retry wrapper gets a chance instead.
-        timeout: Number(process.env.GEMINI_TIMEOUT_MS) || 120_000,
+        timeout: Number(process.env.GEMINI_TIMEOUT_MS) || 240_000,
       },
     });
   }
@@ -238,6 +238,8 @@ export function explainGeminiError(err: unknown, model: string): Error {
     message = `The model "${model}" is not available to this API key, and no replacement could be found.`;
   } else if (/SAFETY|blocked/i.test(raw)) {
     message = 'Gemini declined this request under its safety filters. Rephrase the topic and retry.';
+  } else if (/fetch failed|ENOTFOUND|ECONNREFUSED|ECONNRESET|ETIMEDOUT|socket hang up|network/i.test(raw)) {
+    message = 'Could not reach Google Gemini (network error). It is usually brief: retry in a moment.';
   } else if (status === 503 || /overloaded|UNAVAILABLE/i.test(raw)) {
     message = 'Gemini is temporarily overloaded. Retry in a moment.';
   } else {
@@ -278,26 +280,37 @@ export class OpenAiCompatProvider implements LlmProvider {
       { role: 'user', content: req.prompt },
     ];
 
-    const res = await fetch(`${this.baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.apiKey}`,
-      },
-      body: JSON.stringify({
-        model: this.model,
-        messages,
-        temperature: req.temperature ?? 0.7,
-        // DeepSeek's default output cap is small, and its thinking mode spends
-        // part of the cap on reasoning, which cut long articles off
-        // mid-section. Current models allow up to 384K; 32K leaves room for
-        // thinking plus a long draft without inviting runaway bills.
-        max_tokens: req.maxOutputTokens ?? (this.id === 'deepseek' ? 32_768 : undefined),
-        ...(req.json ? { response_format: { type: 'json_object' } } : {}),
-      }),
-      // A hung call must not eat the whole request's time budget.
-      signal: req.signal ? AbortSignal.any([req.signal, AbortSignal.timeout(TIMEOUT_MS)]) : AbortSignal.timeout(TIMEOUT_MS),
-    });
+    const name = this.id === 'deepseek' ? 'DeepSeek' : 'Grok';
+    let res: Response;
+    try {
+      res = await fetch(`${this.baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.apiKey}`,
+        },
+        body: JSON.stringify({
+          model: this.model,
+          messages,
+          temperature: req.temperature ?? 0.7,
+          // DeepSeek's default output cap is small, and its thinking mode spends
+          // part of the cap on reasoning, which cut long articles off
+          // mid-section. Current models allow up to 384K; 32K leaves room for
+          // thinking plus a long draft without inviting runaway bills.
+          max_tokens: req.maxOutputTokens ?? (this.id === 'deepseek' ? 32_768 : undefined),
+          ...(req.json ? { response_format: { type: 'json_object' } } : {}),
+        }),
+        // A hung call must not eat the whole request's time budget.
+        signal: req.signal ? AbortSignal.any([req.signal, AbortSignal.timeout(TIMEOUT_MS)]) : AbortSignal.timeout(TIMEOUT_MS),
+      });
+    } catch (err) {
+      if (req.signal?.aborted) throw err;
+      const timedOut = err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError');
+      // "timeout" and "unavailable" let the router retry once, then fall back.
+      throw new Error(timedOut
+        ? `${name} did not answer within ${Math.round(TIMEOUT_MS / 1000)} seconds (timeout).`
+        : `Could not reach ${name} (network error, service unavailable). Retry in a moment.`);
+    }
 
     if (!res.ok) {
       const body = await res.text().catch(() => '');
@@ -326,7 +339,7 @@ export class OpenAiCompatProvider implements LlmProvider {
   }
 }
 
-const TIMEOUT_MS = Number(process.env.GEMINI_TIMEOUT_MS) || 120_000;
+const TIMEOUT_MS = Number(process.env.GEMINI_TIMEOUT_MS) || 240_000;
 
 /** DeepSeek and xAI errors in words a site owner can act on. */
 export function explainCompatError(id: 'deepseek' | 'grok', model: string, status: number, body: string): Error {

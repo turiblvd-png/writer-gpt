@@ -1,5 +1,6 @@
 'use client';
 
+import { readJson } from '@/lib/http/read-json';
 import { useMemo, useState } from 'react';
 import type { SubscriberRow } from '@/lib/admin/subscribers';
 import { Notice, StatTile } from '@/components/semantic-ui';
@@ -38,7 +39,7 @@ export function SubscribersWorkspace({
   async function patch(id: string, body: Record<string, string | number | null>) {
     setError(null);
     const res = await fetch(`/api/admin/users/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    const data = await res.json().catch(() => ({}));
+    const data = await readJson(res);
     if (!res.ok) return setError(data.error ?? 'Could not update.');
     setRows((list) => list.map((r) => (r.id === id ? { ...r, ...data.user } : r)));
   }
@@ -46,7 +47,7 @@ export function SubscribersWorkspace({
   async function remove(row: SubscriberRow) {
     if (!window.confirm(`Delete ${row.email}? Their account is removed; their saved articles stay in the database.`)) return;
     const res = await fetch(`/api/admin/users/${row.id}`, { method: 'DELETE' });
-    const data = await res.json().catch(() => ({}));
+    const data = await readJson(res);
     if (!res.ok) return setError(data.error ?? 'Could not delete.');
     setRows((list) => list.filter((r) => r.id !== row.id));
   }
@@ -54,7 +55,7 @@ export function SubscribersWorkspace({
   async function resetPassword(row: SubscriberRow) {
     if (!window.confirm(`Set a new temporary password for ${row.email}?`)) return;
     const res = await fetch(`/api/admin/users/${row.id}/password`, { method: 'POST' });
-    const data = await res.json().catch(() => ({}));
+    const data = await readJson(res);
     if (!res.ok) return setError(data.error ?? 'Could not reset.');
     window.prompt(`Temporary password for ${row.email}. Copy it and send it to them; they can change it under Account.`, data.password);
   }

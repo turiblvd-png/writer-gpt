@@ -280,67 +280,112 @@ export interface GenerateProgress {
   (stage: string, message: string): void;
 }
 
-export async function generateArticle(id: string, onProgress?: GenerateProgress): Promise<SemanticProject> {
+/** The article steps in order. The UI runs them one request at a time. */
+export const ARTICLE_STEPS = ['write-draft', 'polish-article', 'revise-article', 'finish-article'] as const;
+export type ArticleStep = (typeof ARTICLE_STEPS)[number];
+
+function requireArticle(project: SemanticProject): ArticleOutput {
+  const article = project.data.article;
+  if (!article?.markdown) throw new Error('No draft yet. Write the draft first.');
+  return article;
+}
+
+/** Step 1: the draft, from the master prompt. Facts are researched first if missing. */
+export async function writeDraft(id: string, onProgress?: GenerateProgress): Promise<SemanticProject> {
   let project = await load(id);
   const clock = makeClock();
-
   if (!project.data.combinedOutline.length) {
     throw new Error('No outline. Combine competitor outlines or add headings before generating.');
   }
-
   // Facts first. The brief supplies structure and vocabulary; it does not
   // supply truth, and the writer must not fill that gap from memory.
   if (!project.data.facts?.facts.length) {
     onProgress?.('research', 'Researching and checking facts…');
     project = await researchFacts(id);
   }
-  const facts = project.data.facts!;
-  const factText = factSheetBlock(facts, clock).join('\n');
   const budget = lengthBudget(plannedOutline(project), project.data.wordCount.target);
-
   const megaPrompt = buildMegaPrompt(project, clock);
 
   onProgress?.('draft', `Writing ~${budget.effective} words…`);
-  const draft = await complete('draft', {
-    prompt: megaPrompt,
-    temperature: 0.7,
-    maxOutputTokens: Math.min(32000, Math.ceil(budget.effective * 3)),
-  });
+  const draft = await complete(
+    'draft',
+    { prompt: megaPrompt, temperature: 0.7, maxOutputTokens: Math.min(32000, Math.ceil(budget.effective * 3)) },
+    // A long draft is one big call; retrying it three times cannot fit the time limit.
+    { retries: 1 },
+  );
+  const markdown = sanitizeDraft(stripFences(draft.text)).text;
+  const title = firstHeading(markdown) || project.name;
+  const article: ArticleOutput = {
+    markdown,
+    seoTitle: title,
+    metaDescription: '',
+    slug: slugify(title),
+    generatedAt: Date.now(),
+    humanScore: detectTells(markdown).humanScore,
+    quality: assessArticle(project, markdown),
+    stage: 'draft',
+  };
+  return await save(id, { article, megaPrompt });
+}
 
+/** Step 2: one style repair round, if the draft still reads as machine-written. */
+export async function polishArticle(id: string, onProgress?: GenerateProgress): Promise<SemanticProject> {
+  const project = await load(id);
+  const article = requireArticle(project);
   onProgress?.('style', 'Checking for AI writing patterns…');
-  const enforced = await enforceStyle(stripFences(draft.text), {
-    clock,
+  const enforced = await enforceStyle(article.markdown, {
+    clock: makeClock(),
     language: project.language,
+    maxRounds: 1,
     onProgress: (m) => onProgress?.('style', m),
   });
-  let markdown = enforced.markdown;
+  const markdown = enforced.markdown;
+  return await save(id, {
+    article: { ...article, markdown, humanScore: enforced.after.humanScore, quality: assessArticle(project, markdown), stage: 'polished' },
+  });
+}
+
+/**
+ * Step 3: the brief's self-check, done for real. One targeted revision when
+ * the draft missed headings, entities, keyword ranges, length or paragraph
+ * size, kept only if it scores better.
+ */
+export async function reviseArticle(id: string, onProgress?: GenerateProgress): Promise<SemanticProject> {
+  const project = await load(id);
+  const article = requireArticle(project);
+  const clock = makeClock();
+  let markdown = article.markdown;
   let quality = assessArticle(project, markdown);
 
-  // The brief's self-check, done for real: one targeted revision when the
-  // draft missed headings, entities, keyword ranges, length or paragraph size.
   if (quality.passed < quality.total) {
     onProgress?.('revise', `Fixing ${quality.total - quality.passed} failed check(s)…`);
+    const budget = lengthBudget(plannedOutline(project), project.data.wordCount.target);
+    const factText = project.data.facts ? factSheetBlock(project.data.facts, clock).join('\n') : '';
     try {
-      const revision = await complete('draft', {
-        prompt: [
-          'Revise the article below so it passes these checks. Change only what the checks require; keep every correct fact, heading and passage as it is.',
-          '',
-          ...revisionInstructions(quality).map((l) => `- ${l}`),
-          '',
-          'Rules that still apply: no em dashes, paragraphs of one to three sentences, no stock AI phrases, and every specific must come from these facts:',
-          factText,
-          '',
-          'Required heading structure, exact wording and order:',
-          ...plannedOutline(project).map((h) => `${'#'.repeat(Math.max(1, Math.min(6, h.level)))} ${h.text}`),
-          '',
-          'ARTICLE:',
-          markdown,
-          '',
-          'Return the complete revised article as markdown, nothing else.',
-        ].join('\n'),
-        temperature: 0.4,
-        maxOutputTokens: Math.min(32000, Math.ceil(budget.effective * 3)),
-      });
+      const revision = await complete(
+        'draft',
+        {
+          prompt: [
+            'Revise the article below so it passes these checks. Change only what the checks require; keep every correct fact, heading and passage as it is.',
+            '',
+            ...revisionInstructions(quality).map((l) => `- ${l}`),
+            '',
+            'Rules that still apply: no em dashes, paragraphs of one to three sentences, no stock AI phrases, and every specific must come from these facts:',
+            factText,
+            '',
+            'Required heading structure, exact wording and order:',
+            ...plannedOutline(project).map((h) => `${'#'.repeat(Math.max(1, Math.min(6, h.level)))} ${h.text}`),
+            '',
+            'ARTICLE:',
+            markdown,
+            '',
+            'Return the complete revised article as markdown, nothing else.',
+          ].join('\n'),
+          temperature: 0.4,
+          maxOutputTokens: Math.min(32000, Math.ceil(budget.effective * 3)),
+        },
+        { retries: 1 },
+      );
       const revised = sanitizeDraft(stripFences(revision.text)).text;
       const after = assessArticle(project, revised, true);
       // Keep the revision only if it is genuinely better.
@@ -349,66 +394,70 @@ export async function generateArticle(id: string, onProgress?: GenerateProgress)
         quality = after;
       }
     } catch {
-      onProgress?.('revise', 'Revision pass failed; keeping the first draft.');
+      onProgress?.('revise', 'Revision pass failed; keeping the current draft.');
+    }
+  }
+  return await save(id, {
+    article: { ...article, markdown, quality, humanScore: detectTells(markdown).humanScore, stage: 'revised' },
+  });
+}
+
+/** Step 4: metadata and fact check, side by side. Either may fail without losing the article. */
+export async function finishArticle(id: string, onProgress?: GenerateProgress): Promise<SemanticProject> {
+  const project = await load(id);
+  const article = requireArticle(project);
+  const clock = makeClock();
+  const markdown = article.markdown;
+  const factText = project.data.facts ? factSheetBlock(project.data.facts, clock).join('\n') : '';
+  onProgress?.('finish', 'Writing metadata and fact-checking…');
+
+  const [meta, check] = await Promise.allSettled([
+    complete('structure', { prompt: P.metaPrompt(project, markdown, clock), json: true, temperature: 0.5 }, { retries: 1 }),
+    complete('verify', { prompt: P.verifyPrompt(markdown, factText, clock), grounded: true, temperature: 0.1 }, { retries: 1 }),
+  ]);
+
+  let { seoTitle, metaDescription, slug } = article;
+  let altTexts = article.altTexts ?? [];
+  if (meta.status === 'fulfilled') {
+    try {
+      const parsed = extractJson<{ seoTitle?: string; metaDescription?: string; slug?: string; altTexts?: unknown }>(meta.value.text);
+      seoTitle = parsed.seoTitle?.trim() || seoTitle;
+      metaDescription = parsed.metaDescription?.trim() || metaDescription;
+      slug = slugify(parsed.slug?.trim() || seoTitle);
+      if (Array.isArray(parsed.altTexts)) altTexts = parsed.altTexts.filter((t): t is string => typeof t === 'string').slice(0, 6);
+    } catch {
+      // Metadata is recoverable by hand; a finished article is not worth losing.
     }
   }
 
-  onProgress?.('metadata', 'Generating SEO metadata…');
-  let seoTitle = firstHeading(markdown) || project.name;
-  let metaDescription = '';
-  let slug = slugify(seoTitle);
-  let altTexts: string[] = [];
-
-  try {
-    const meta = await complete('structure', {
-      prompt: P.metaPrompt(project, markdown, clock),
-      json: true,
-      temperature: 0.5,
-    });
-    const parsed = extractJson<{ seoTitle?: string; metaDescription?: string; slug?: string; altTexts?: unknown }>(meta.text);
-    seoTitle = parsed.seoTitle?.trim() || seoTitle;
-    metaDescription = parsed.metaDescription?.trim() ?? '';
-    slug = slugify(parsed.slug?.trim() || seoTitle);
-    altTexts = Array.isArray(parsed.altTexts) ? parsed.altTexts.filter((t): t is string => typeof t === 'string').slice(0, 6) : [];
-  } catch {
-    // Metadata is recoverable by hand; a finished article is not worth losing.
-    onProgress?.('metadata', 'Metadata generation failed, using the H1 as the title.');
-  }
-
-  onProgress?.('verify', 'Fact-checking the draft…');
-  let unverifiedClaims: string[] = [];
-  try {
-    const check = await complete('verify', {
-      prompt: P.verifyPrompt(markdown, factText, clock),
-      grounded: true,
-      temperature: 0.1,
-    });
-    const parsed = extractJson<{ claims?: unknown }>(check.text);
-    if (Array.isArray(parsed.claims)) {
-      unverifiedClaims = parsed.claims
-        .filter((c): c is Record<string, unknown> => typeof c === 'object' && c !== null)
-        .filter((c) => c.verdict !== 'supported')
-        .map((c) => `${String(c.text ?? '')}${c.note ? `, ${String(c.note)}` : ''}`)
-        .filter((t) => t.trim().length > 0);
+  let unverifiedClaims = article.unverifiedClaims ?? [];
+  if (check.status === 'fulfilled') {
+    try {
+      const parsed = extractJson<{ claims?: unknown }>(check.value.text);
+      if (Array.isArray(parsed.claims)) {
+        unverifiedClaims = parsed.claims
+          .filter((c): c is Record<string, unknown> => typeof c === 'object' && c !== null)
+          .filter((c) => c.verdict !== 'supported')
+          .map((c) => `${String(c.text ?? '')}${c.note ? `, ${String(c.note)}` : ''}`)
+          .filter((t) => t.trim().length > 0);
+      }
+    } catch {
+      onProgress?.('verify', 'Fact-check output could not be parsed; claims were not verified.');
     }
-  } catch {
-    onProgress?.('verify', 'Fact-check output could not be parsed; claims were not verified.');
   }
-
-  const article: ArticleOutput = {
-    markdown,
-    seoTitle,
-    metaDescription,
-    slug,
-    generatedAt: Date.now(),
-    unverifiedClaims,
-    humanScore: detectTells(markdown).humanScore,
-    quality,
-    altTexts,
-  };
 
   onProgress?.('done', `${analyseDocument(markdown).words} words written.`);
-  return await save(id, { article, megaPrompt });
+  return await save(id, {
+    article: { ...article, seoTitle, metaDescription, slug, altTexts, unverifiedClaims, generatedAt: Date.now(), stage: 'done' },
+  });
+}
+
+/** All steps in one go, for callers without a time limit (scripts, tests). */
+export async function generateArticle(id: string, onProgress?: GenerateProgress): Promise<SemanticProject> {
+  await writeDraft(id, onProgress);
+  await polishArticle(id, onProgress);
+  await reviseArticle(id, onProgress);
+  return finishArticle(id, onProgress);
 }
 
 function stripFences(text: string): string {

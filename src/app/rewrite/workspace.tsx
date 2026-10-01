@@ -1,5 +1,6 @@
 'use client';
 
+import { readJson } from '@/lib/http/read-json';
 import { useState } from 'react';
 import { Notice, Panel, Spinner, StatTile } from '@/components/semantic-ui';
 import { IconCheck, IconCopy, IconGlobe, IconLink, IconPlus, IconTrash, IconWand } from '@/components/icons';
@@ -42,7 +43,7 @@ export function RewriteWorkspace({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url, brandVoiceId, targetLanguage, targetWords }),
       });
-      const data = await res.json();
+      const data = await readJson(res);
       if (!res.ok) throw new Error(data.error ?? 'Rewrite failed.');
       setResult(data.article);
       setHistory((h) => [data.article, ...h]);
@@ -218,7 +219,7 @@ function NewVoiceForm({ onCreated }: { onCreated: (v: BrandVoice) => void }) {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ name, description }),
             });
-            const data = await res.json();
+            const data = await readJson(res);
             if (!res.ok) throw new Error(data.error ?? 'Could not save the voice.');
             onCreated(data.voice);
           } catch (err) {

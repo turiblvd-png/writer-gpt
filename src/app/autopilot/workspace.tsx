@@ -1,5 +1,6 @@
 'use client';
 
+import { readJson } from '@/lib/http/read-json';
 import { useRef, useState } from 'react';
 import Link from 'next/link';
 import type { AutopilotItem, AutopilotStatus } from '@/lib/autopilot/queue';
@@ -35,7 +36,7 @@ export function AutopilotWorkspace({ initialQueue, cronEnabled }: { initialQueue
   };
 
   async function refresh() {
-    const data = await fetch('/api/autopilot').then((r) => r.json()).catch(() => null);
+    const data = await fetch('/api/autopilot').then(readJson).catch(() => null);
     if (data?.queue) {
       latest.current = data.queue;
       setQueue(data.queue);
@@ -53,7 +54,7 @@ export function AutopilotWorkspace({ initialQueue, cronEnabled }: { initialQueue
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ keywords, language, seoMode, targetWords, includeFaq: true }),
       });
-      const data = await res.json();
+      const data = await readJson(res);
       if (!res.ok) throw new Error(data.error ?? 'Could not queue keywords.');
       setQueue(data.queue);
       setText('');
@@ -72,7 +73,7 @@ export function AutopilotWorkspace({ initialQueue, cronEnabled }: { initialQueue
     const next = [...latest.current].reverse().find((i) => i.status === 'queued');
     setCurrent(next?.keyword ?? null);
     const res = await fetch('/api/autopilot/run', { method: 'POST' });
-    const data = await res.json().catch(() => ({}));
+    const data = await readJson(res);
     await refresh();
     if (!res.ok) {
       setError(data.error ?? `Autopilot tick failed (HTTP ${res.status}).`);
@@ -107,7 +108,7 @@ export function AutopilotWorkspace({ initialQueue, cronEnabled }: { initialQueue
   }
 
   async function clearFinished() {
-    const data = await fetch('/api/autopilot', { method: 'DELETE' }).then((r) => r.json());
+    const data = await fetch('/api/autopilot', { method: 'DELETE' }).then(readJson);
     setQueue(data.queue);
   }
 

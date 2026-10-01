@@ -1,5 +1,6 @@
 'use client';
 
+import { readJson } from '@/lib/http/read-json';
 import { useEffect, useRef, useState } from 'react';
 import type { CopilotConversation, CopilotMessage } from '@/lib/copilot/chat';
 import { renderMarkdown } from '@/lib/content/render';
@@ -36,7 +37,7 @@ export function CopilotChat({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ conversationId: active?.id, message }),
       });
-      const data = await res.json().catch(() => ({}));
+      const data = await readJson(res);
       if (!res.ok) throw new Error(data.error ?? `The copilot failed (HTTP ${res.status}).`);
       const conv: CopilotConversation = data.conversation;
       setActive(conv);

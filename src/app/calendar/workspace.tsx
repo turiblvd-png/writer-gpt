@@ -1,5 +1,6 @@
 'use client';
 
+import { readJson } from '@/lib/http/read-json';
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { CHANNELS, STATUSES, type CalendarEntry, type CalendarStatus } from '@/lib/calendar/types';
@@ -70,7 +71,7 @@ export function CalendarWorkspace({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(draft),
       });
-      const data = await res.json();
+      const data = await readJson(res);
       if (!res.ok) throw new Error(data.error ?? 'Could not save.');
       setEntries((list) => [...list.filter((e) => e.id !== data.entry.id), data.entry]);
       setDraft(null);

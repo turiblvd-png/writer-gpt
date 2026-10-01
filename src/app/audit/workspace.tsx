@@ -1,5 +1,6 @@
 'use client';
 
+import { readJson } from '@/lib/http/read-json';
 import { useState } from 'react';
 import type { AuditReport } from '@/lib/audit/audit';
 import { renderMarkdown } from '@/lib/content/render';
@@ -33,7 +34,7 @@ export function AuditWorkspace({ initialHistory }: { initialHistory: AuditReport
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(mode === 'url' ? { url, keyword } : { text, keyword }),
       });
-      const data = await res.json();
+      const data = await readJson(res);
       if (!res.ok) throw new Error(data.error ?? 'Audit failed.');
       setReport(data.audit);
       setHistory((h) => [data.audit, ...h.filter((x) => x.id !== data.audit.id)]);
@@ -50,7 +51,7 @@ export function AuditWorkspace({ initialHistory }: { initialHistory: AuditReport
     setError(null);
     try {
       const res = await fetch(`/api/audit/${report.id}/advice`, { method: 'POST' });
-      const data = await res.json();
+      const data = await readJson(res);
       if (!res.ok) throw new Error(data.error ?? 'Could not generate a fix plan.');
       setReport(data.audit);
       setHistory((h) => h.map((x) => (x.id === data.audit.id ? data.audit : x)));

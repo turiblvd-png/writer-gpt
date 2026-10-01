@@ -1,5 +1,6 @@
 'use client';
 
+import { readJson } from '@/lib/http/read-json';
 import { useState } from 'react';
 import type { SocialPost, SocialSet } from '@/lib/social/posts';
 import { PLATFORMS, type Platform } from '@/lib/social/platforms';
@@ -42,7 +43,7 @@ export function SocialWorkspace({
           source === 'article' ? { articleId, url, tone, platforms } : { title, text, url, tone, platforms },
         ),
       });
-      const data = await res.json();
+      const data = await readJson(res);
       if (!res.ok) throw new Error(data.error ?? 'Could not write posts.');
       setCurrent(data.set);
       setSets((s) => [data.set, ...s]);

@@ -1,5 +1,6 @@
 'use client';
 
+import { readJson } from '@/lib/http/read-json';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { SEO_MODES, type SeoMode } from '@/lib/content/types';
@@ -65,7 +66,7 @@ export function GenerateWizard({ initialTopic = '' }: { initialTopic?: string })
 
       // Validation and configuration errors come back as plain JSON.
       if (!res.ok || !res.body) {
-        const data = await res.json().catch(() => ({}));
+        const data = await readJson(res);
         throw new Error(data.error ?? `Request failed (${res.status}).`);
       }
 
@@ -86,7 +87,15 @@ export function GenerateWizard({ initialTopic = '' }: { initialTopic?: string })
           buffer = buffer.slice(newline + 1);
           if (!line) continue;
 
-          const event = JSON.parse(line) as { type: string; snapshot?: Snapshot; error?: string; articleId?: string | null };
+          let event: { type: string; snapshot?: Snapshot; error?: string; articleId?: string | null };
+          try {
+            event = JSON.parse(line);
+          } catch {
+            // The host replaced the stream with its own error page (usually its time limit).
+            finished = true;
+            setError('The host stopped this run before it finished (usually its time limit). Please try again; a shorter target length is faster.');
+            continue;
+          }
           if (event.snapshot) setSnapshot(event.snapshot);
           if (event.type === 'done') {
             finished = true;

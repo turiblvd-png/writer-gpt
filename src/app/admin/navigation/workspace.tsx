@@ -1,5 +1,6 @@
 'use client';
 
+import { readJson } from '@/lib/http/read-json';
 import { useState } from 'react';
 import { EDITABLE_SECTIONS, arrangeNav, type NavItem } from '@/lib/nav';
 import type { NavSettings } from '@/lib/platform/settings';
@@ -26,7 +27,7 @@ export function NavigationWorkspace({ initial }: { initial: NavSettings }) {
       setMsg({ tone: 'ok', text: 'Menu saved. Reloading so you see it…' });
       setTimeout(() => window.location.reload(), 600);
     } else {
-      setMsg({ tone: 'bad', text: (await res.json().catch(() => ({}))).error ?? 'Could not save.' });
+      setMsg({ tone: 'bad', text: (await readJson(res)).error ?? 'Could not save.' });
     }
   }
 
