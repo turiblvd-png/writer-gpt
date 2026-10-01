@@ -1,95 +1,73 @@
 import Link from 'next/link';
 import { Shell, PageHeader } from '@/components/shell';
-import { StorageBanner } from '@/components/storage-banner';
-import { configuredProviders, roleBindings } from '@/lib/ai';
-import { probeStorage, storageStatus } from '@/lib/db/store';
-import { getWpConfigView } from '@/lib/publishing/wordpress';
-import { authEnabled } from '@/lib/auth/session';
+import { getViewer } from '@/lib/auth/viewer';
+import { usageFor } from '@/lib/usage/meter';
+import { listArticles } from '@/lib/db/store';
 import { safeRead } from '@/lib/db/safe';
 import { SignOutButton } from './sign-out';
+import { PasswordForm } from './password';
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'Account & Setup · Writer-GPT' };
+export const metadata = { title: 'Account · Writer-GPT' };
 
-function Row({ ok, label, detail, fix }: { ok: boolean | 'warn'; label: string; detail: string; fix?: React.ReactNode }) {
-  const style = ok === true ? 'bg-ok/15 text-ok' : ok === 'warn' ? 'bg-warn/15 text-warn' : 'bg-bad/15 text-bad';
+export default async function AccountPage() {
+  const viewer = await getViewer();
+  const user = viewer.user;
+  const usage = user ? await safeRead(() => usageFor(user.id), null, 'usageFor') : null;
+  const articles = await safeRead(() => listArticles(1000), [], 'listArticles');
+  const month = new Date().toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+
   return (
-    <li className="flex flex-wrap items-start gap-3 py-3">
-      <span className={`mt-0.5 rounded-md px-2 py-0.5 text-[10px] font-bold uppercase ${style}`}>{ok === true ? 'OK' : ok === 'warn' ? 'Check' : 'Missing'}</span>
-      <div className="min-w-0 flex-1">
-        <div className="text-sm font-semibold">{label}</div>
-        <div className="text-xs text-ink-3">{detail}</div>
-        {fix && ok !== true && <div className="mt-1 text-xs text-ink-2">{fix}</div>}
+    <Shell>
+      <PageHeader title="Account" subtitle="Your profile, plan and usage." />
+      <div className="grid gap-4 lg:grid-cols-2">
+        <section className="card p-5">
+          <h3 className="mb-3 font-bold">Profile</h3>
+          {user ? (
+            <dl className="space-y-2 text-sm">
+              <Row label="Name" value={user.name} />
+              <Row label="Email" value={user.email} />
+              <Row label="Plan" value={<span className="capitalize">{user.plan}</span>} />
+              <Row label="Role" value={<span className="capitalize">{user.role === 'owner' ? 'Developer (owner)' : user.role}</span>} />
+              <Row label="Member since" value={new Date(user.createdAt).toLocaleDateString()} />
+            </dl>
+          ) : (
+            <p className="text-sm text-ink-3">Accounts are not switched on for this site, so everyone shares one workspace.</p>
+          )}
+          {viewer.isAdmin && (
+            <p className="mt-4 rounded-xl bg-accent/10 p-3 text-sm">
+              You are the developer. Manage AI models, subscribers and the menu in{' '}
+              <Link href="/admin" className="font-semibold text-accent underline">the Developer dashboard</Link>.
+            </p>
+          )}
+          {user && <div className="mt-4 border-t border-line pt-4"><SignOutButton /></div>}
+        </section>
+
+        <section className="card p-5">
+          <h3 className="mb-3 font-bold">Usage in {month}</h3>
+          <dl className="space-y-2 text-sm">
+            <Row label="Articles in your library" value={articles.length.toLocaleString()} />
+            <Row label="AI requests" value={(usage?.requests ?? 0).toLocaleString()} />
+            <Row label="Words read and written by AI" value={Math.round(((usage?.input ?? 0) + (usage?.output ?? 0)) * 0.75).toLocaleString()} />
+          </dl>
+        </section>
+
+        {user && (
+          <section className="card p-5">
+            <h3 className="mb-3 font-bold">Change password</h3>
+            <PasswordForm />
+          </section>
+        )}
       </div>
-    </li>
+    </Shell>
   );
 }
 
-export default async function AccountPage() {
-  const providers = configuredProviders();
-  const bindings = roleBindings();
-  const storage = await safeRead(async () => ({ ...(await storageStatus()), ...(await probeStorage()) }), null, 'storageStatus');
-  const wordpress = await safeRead(() => getWpConfigView(), { siteUrl: '', username: '', source: 'none' as const, connected: false }, 'getWpConfigView');
-  const gate = authEnabled();
-  const cron = Boolean(process.env.CRON_SECRET);
-  const onVercel = Boolean(process.env.VERCEL);
-  const sharedStorage = storage?.mode === 'postgres' || storage?.mode === 'persistent';
-
+function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <Shell banner={<StorageBanner />}>
-      <PageHeader title="Account & Setup" subtitle="Everything this workspace needs to run, and how to fix whatever is missing." />
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <section className="card p-5">
-          <h3 className="mb-1 font-bold">Setup checklist</h3>
-          <p className="mb-2 text-xs text-ink-3">Environment variables are set in your host, for Vercel under Project → Settings → Environment Variables. Redeploy after changing them.</p>
-          <ul className="divide-y divide-line">
-            <Row ok={providers.gemini} label="Gemini API key" detail={providers.gemini ? 'GEMINI_API_KEY is set.' : 'No AI tool can run without it.'}
-                 fix={<>Create a key at aistudio.google.com, then add it as <code>GEMINI_API_KEY</code>.</>} />
-            <Row ok={sharedStorage ? true : storage?.writable ? 'warn' : false}
-                 label="Database"
-                 detail={storage ? `${storage.driver ?? storage.mode}${storage.writable ? ', writable' : ', not writable'}${storage.perInstance ? ', not shared between server instances' : ''}` : 'Could not read storage status.'}
-                 fix={<>On Vercel open Storage → Create Database → Neon (Postgres) and connect it to this project. That sets <code>DATABASE_URL</code>.</>} />
-            <Row ok={gate ? true : onVercel ? false : 'warn'} label="Workspace password"
-                 detail={gate ? 'APP_PASSWORD is set. Visitors must sign in.' : 'Anyone with the link can use your API quota and publish to your site.'}
-                 fix={<>Add <code>APP_PASSWORD</code> with a long passphrase.</>} />
-            <Row ok={cron ? true : 'warn'} label="Scheduled Autopilot"
-                 detail={cron ? 'CRON_SECRET is set. The queue runs once a day automatically.' : 'Optional. Without it, Autopilot runs only from the Run buttons.'}
-                 fix={<>Add <code>CRON_SECRET</code> with any random string.</>} />
-            <Row ok={wordpress.connected ? true : 'warn'} label="WordPress"
-                 detail={wordpress.connected ? `${wordpress.siteUrl} as ${wordpress.username}` : 'Optional. Needed to publish from Writer-GPT.'}
-                 fix={<Link href="/publishing" className="text-accent underline">Connect on the Publishing page</Link>} />
-          </ul>
-        </section>
-
-        <section className="card p-5">
-          <h3 className="mb-3 font-bold">AI providers</h3>
-          <ul className="mb-4 flex flex-wrap gap-2">
-            {(Object.entries(providers) as [string, boolean][]).map(([id, on]) => (
-              <li key={id} className={`rounded-lg px-3 py-1.5 text-xs font-semibold capitalize ${on ? 'bg-ok/15 text-ok' : 'bg-surface-3 text-ink-3'}`}>
-                {id} {on ? 'connected' : 'not set'}
-              </li>
-            ))}
-          </ul>
-          <h4 className="mb-2 text-xs font-bold uppercase tracking-wider text-ink-3">Model per task</h4>
-          <table className="w-full text-sm">
-            <tbody className="divide-y divide-line">
-              {bindings.map((b) => (
-                <tr key={b.role}>
-                  <td className="py-2 capitalize text-ink-2">{b.role}</td>
-                  <td className="py-2 font-mono text-xs">{b.binding}{b.overridden && <span className="ml-1 text-ink-3">(override)</span>}</td>
-                  {b.error && <td className="py-2 text-xs text-bad">{b.error}</td>}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <p className="mt-3 text-xs text-ink-3">
-            Retired Gemini models are replaced automatically with the newest stable one. To pin a model, set e.g.
-            <code className="mx-1">MODEL_DRAFT=gemini:gemini-2.5-pro</code>, or route a role to DeepSeek or Grok with their keys.
-          </p>
-          {gate && <div className="mt-4 border-t border-line pt-4"><SignOutButton /></div>}
-        </section>
-      </div>
-    </Shell>
+    <div className="flex items-center justify-between gap-4 border-b border-line pb-2 last:border-0">
+      <dt className="text-ink-3">{label}</dt>
+      <dd className="text-right font-medium">{value}</dd>
+    </div>
   );
 }

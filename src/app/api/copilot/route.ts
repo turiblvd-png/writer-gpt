@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { configuredProviders } from '@/lib/ai';
+import { aiReady, AI_NOT_READY } from '@/lib/ai';
 import { listConversations, sendMessage } from '@/lib/copilot/chat';
 import { safeRead } from '@/lib/db/safe';
 
@@ -18,8 +18,8 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  if (!configuredProviders().gemini) {
-    return NextResponse.json({ error: 'Set GEMINI_API_KEY in your hosting environment variables, then redeploy.' }, { status: 503 });
+  if (!(await aiReady())) {
+    return NextResponse.json({ error: AI_NOT_READY }, { status: 503 });
   }
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: 'Type a question first.' }, { status: 400 });

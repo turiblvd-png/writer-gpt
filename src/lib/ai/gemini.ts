@@ -43,7 +43,7 @@ export class GeminiProvider implements LlmProvider {
 
   async complete(req: CompletionRequest): Promise<CompletionResult> {
     const primary = this.resolved ?? this.model;
-    const chain = fallbackChain(primary);
+    const chain = req.exact ? [primary] : fallbackChain(primary);
     // Skip models already known to be out of quota; if every one is, still try
     // the smallest, since its limit may have reset.
     const order = chain.filter((m) => !isExhausted(m));
@@ -214,10 +214,20 @@ export function explainGeminiError(err: unknown, model: string): Error {
   const status = statusOf(err);
 
   let message: string;
-  if (/API key not valid|API_KEY_INVALID/i.test(raw) || status === 401) {
-    message = 'The Gemini API key was rejected. Check GEMINI_API_KEY in your hosting environment variables, then redeploy.';
+  if (/expired/i.test(raw) && /key/i.test(raw)) {
+    message = 'This Gemini API key has expired. Create a new key in Google AI Studio and paste it under Developer → AI Models.';
+  } else if (/API key not valid|API_KEY_INVALID/i.test(raw) || status === 401) {
+    message = 'Google rejected the Gemini API key. It may be mistyped, have a space in it, or be deleted. Paste it again under Developer → AI Models.';
+  } else if (/referer|referrer/i.test(raw)) {
+    message = 'This Gemini key only works from certain websites (an HTTP referrer restriction), so the server cannot use it. In Google Cloud Console → Credentials, set the key\'s application restriction to None.';
+  } else if (/IP address|API_KEY_IP_ADDRESS_BLOCKED/i.test(raw)) {
+    message = 'This Gemini key is restricted to certain IP addresses. In Google Cloud Console → Credentials, set the key\'s application restriction to None.';
+  } else if (/API_KEY_SERVICE_BLOCKED|are blocked/i.test(raw)) {
+    message = 'This Gemini key is restricted to other APIs. In Google Cloud Console → Credentials, allow the Generative Language API for this key.';
+  } else if (/location is not supported|FAILED_PRECONDITION/i.test(raw)) {
+    message = 'Google does not offer the free Gemini API in the server\'s region for this key. Turn on billing for the key\'s project in Google AI Studio.';
   } else if (status === 403 && /PERMISSION_DENIED|has not been used|disabled/i.test(raw)) {
-    message = 'This API key is not allowed to use the Gemini API. Enable the Generative Language API for the key\'s Google project.';
+    message = 'This API key is not allowed to use the Gemini API. Enable the Generative Language API for the key\'s Google project, or create the key in Google AI Studio (aistudio.google.com).';
   } else if (status === 429 || /RESOURCE_EXHAUSTED|quota/i.test(raw)) {
     message = 'Gemini rate limit or quota reached. Wait a minute and retry, or raise the quota on the key\'s Google project.';
   } else if (isModelNotFound(err)) {
@@ -281,12 +291,13 @@ export class OpenAiCompatProvider implements LlmProvider {
         max_tokens: req.maxOutputTokens ?? (this.id === 'deepseek' ? 32_768 : undefined),
         ...(req.json ? { response_format: { type: 'json_object' } } : {}),
       }),
-      signal: req.signal ?? null,
+      // A hung call must not eat the whole request's time budget.
+      signal: req.signal ? AbortSignal.any([req.signal, AbortSignal.timeout(TIMEOUT_MS)]) : AbortSignal.timeout(TIMEOUT_MS),
     });
 
     if (!res.ok) {
       const body = await res.text().catch(() => '');
-      throw new Error(`${this.id} request failed (${res.status}): ${body.slice(0, 400)}`);
+      throw explainCompatError(this.id, this.model, res.status, body);
     }
 
     const data = (await res.json()) as {
@@ -309,4 +320,28 @@ export class OpenAiCompatProvider implements LlmProvider {
       provider: this.id,
     };
   }
+}
+
+const TIMEOUT_MS = Number(process.env.GEMINI_TIMEOUT_MS) || 120_000;
+
+/** DeepSeek and xAI errors in words a site owner can act on. */
+export function explainCompatError(id: 'deepseek' | 'grok', model: string, status: number, body: string): Error {
+  const name = id === 'deepseek' ? 'DeepSeek' : 'Grok';
+  let message: string;
+  if (status === 401 || (status === 403 && /key|auth/i.test(body))) {
+    message = `${name} rejected the API key. Paste it again under Developer → AI Models.`;
+  } else if (status === 402 || /insufficient.?balance|credit|billing/i.test(body)) {
+    message = `Your ${name} account has no balance left. Top it up on the ${name} platform.`;
+  } else if (status === 429) {
+    message = `${name} rate limit reached. Wait a minute and retry.`;
+  } else if ((status === 400 || status === 404) && /model/i.test(body)) {
+    message = `${name} does not recognise the model "${model}". Pick another in Developer → AI Models.`;
+  } else if (status >= 500) {
+    message = `${name} is having trouble (HTTP ${status}). Retry in a moment.`;
+  } else {
+    message = `${name} request failed (HTTP ${status}).`;
+  }
+  const err = new Error(message);
+  (err as Error & { cause?: unknown }).cause = new Error(`HTTP ${status}: ${body.slice(0, 400)}`);
+  return err;
 }

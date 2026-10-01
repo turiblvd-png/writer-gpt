@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { configuredProviders } from '@/lib/ai';
+import { aiReady, AI_NOT_READY } from '@/lib/ai';
 import * as A from '@/lib/semantic/actions';
 import { compileMegaPrompt } from '@/lib/semantic/actions';
 
@@ -27,9 +27,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const action = body.action ?? '';
   if (!action) return NextResponse.json({ error: 'No action given.' }, { status: 400 });
 
-  if (!LOCAL_ACTIONS.has(action) && !configuredProviders().gemini) {
+  if (!LOCAL_ACTIONS.has(action) && !(await aiReady())) {
     return NextResponse.json(
-      { error: 'No Gemini API key configured. Set GEMINI_API_KEY (see .env.example).' },
+      { error: AI_NOT_READY },
       { status: 503 },
     );
   }

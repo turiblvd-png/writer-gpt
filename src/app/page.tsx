@@ -11,7 +11,8 @@ import { StorageBanner } from '@/components/storage-banner';
 export const dynamic = 'force-dynamic';
 
 export default async function DashboardPage() {
-  const providers = configuredProviders();
+  const providers = await configuredProviders();
+  const anyAi = Object.values(providers).some(Boolean);
   const [articles, queue] = await Promise.all([
     safeRead(() => listArticles(200), [], 'listArticles'),
     safeRead(() => listQueue(200), [], 'listQueue'),
@@ -29,10 +30,10 @@ export default async function DashboardPage() {
         action={<Link href="/generate" className="btn-primary">New article</Link>}
       />
 
-      {!providers.gemini && (
+      {!anyAi && (
         <p className="mb-5 rounded-xl border border-warn/30 bg-warn/10 p-4 text-sm text-ink-2">
-          The AI tools need a Gemini API key. Add <code className="rounded bg-surface-3 px-1.5 py-0.5 font-mono text-xs">GEMINI_API_KEY</code> to
-          your hosting environment variables and redeploy. <Link href="/account" className="text-accent underline">See the setup checklist</Link>.
+          No AI provider is connected yet, so the writing tools cannot run. The developer can add a key under{' '}
+          <Link href="/admin/ai" className="text-accent underline">Developer → AI Models</Link>.
         </p>
       )}
 

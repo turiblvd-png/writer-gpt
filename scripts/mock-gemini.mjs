@@ -111,6 +111,37 @@ createServer((req, res) => {
   req.on('end', () => {
     res.setHeader('Content-Type', 'application/json');
 
+    // OpenAI-compatible endpoints, standing in for DeepSeek and Grok.
+    if (req.url?.startsWith('/v1/')) {
+      if (req.method === 'GET' && req.url.startsWith('/v1/models')) {
+        res.end(JSON.stringify({ data: [{ id: 'deepseek-flash' }, { id: 'deepseek-v4-pro' }] }));
+        return;
+      }
+      const parsed = JSON.parse(body || '{}');
+      if (!String(req.headers.authorization ?? '').startsWith('Bearer sk-')) {
+        res.statusCode = 401;
+        res.end(JSON.stringify({ error: { message: 'Authentication Fails, Your api key is invalid', type: 'authentication_error' } }));
+        return;
+      }
+      const prompt = (parsed.messages ?? []).map((m) => m.content).join('\n');
+      let text = answer(prompt);
+      if (parsed.response_format?.type === 'json_object' && !/^[\[{]/.test(text.trim())) text = '{"ok":true}';
+      console.log(`[mock] openai-compat ${parsed.model} prompt=${prompt.slice(0, 60).replace(/\s+/g, ' ')}…`);
+      res.end(JSON.stringify({
+        choices: [{ message: { role: 'assistant', content: text } }],
+        usage: { prompt_tokens: Math.ceil(prompt.length / 4), completion_tokens: Math.ceil(text.length / 4), total_tokens: 0 },
+      }));
+      return;
+    }
+
+    // GEMINI_INVALID=1 answers every Gemini call the way Google does for a bad key.
+    if (process.env.GEMINI_INVALID && /generateContent|\/models/.test(req.url ?? '')) {
+      res.statusCode = 400;
+      res.end(JSON.stringify({ error: { code: 400, status: 'INVALID_ARGUMENT', message: 'API key not valid. Please pass a valid API key.',
+        details: [{ '@type': 'type.googleapis.com/google.rpc.ErrorInfo', reason: 'API_KEY_INVALID' }] } }));
+      return;
+    }
+
     if (req.method === 'GET' && /\/models(\?|$)/.test(req.url)) {
       const models = retired
         ? ['models/gemini-3-flash', 'models/gemini-3-pro']

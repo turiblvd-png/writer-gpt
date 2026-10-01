@@ -37,7 +37,7 @@ export async function GET() {
       node: process.version,
     },
     storage,
-    providers: configuredProviders(),
+    providers: await configuredProviders().catch(() => ({})),
     tools: {
       'generate-content': 'ready',
       'semantic-writer': { status: 'ready', stages: STEPS.length },

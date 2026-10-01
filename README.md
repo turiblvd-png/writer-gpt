@@ -17,7 +17,27 @@ in one workspace.
 | AI | **Reports** | Output, quality scores, weekly volume and citation trends |
 | Library | **My Articles / Social Media Posts / Content Calendar** | Library, platform-native posts, and planning |
 | Publishing | **WordPress** | Draft, publish or schedule via Application Password; re-publish updates the same post |
-| Account | **Account & Setup** | Checklist of what is configured and how to fix what is not |
+| Account | **Account** | Profile, plan, this month's usage, password |
+| Developer | **Developer dashboard** | Owner only: AI keys and models per task, provider fallback order (drag & drop), subscribers, menu layout (drag & drop, hide tools), setup checklist |
+
+## Accounts and the developer dashboard
+
+With `APP_PASSWORD` set, everyone signs up with their own email and sees only
+their own articles, projects and settings. The developer account is
+`turi.ishtiaq@gmail.com` (change with `OWNER_EMAIL`); creating it asks for the
+setup code, which is the `APP_PASSWORD` value, so nobody else can claim it.
+Records saved before accounts existed belong to the developer.
+
+The developer dashboard (`/admin`) holds:
+
+- **AI Models**: paste Gemini, DeepSeek or Grok keys (encrypted at rest, never
+  shown again), test each one, and choose the provider and model for each task
+  from dropdowns filled live from the provider. Drag the providers into the
+  order that takes over when one fails.
+- **Subscribers**: accounts, plan, last activity, articles, AI requests and
+  estimated AI cost this month; suspend, delete, change plan or role.
+- **Menu & Tools**: drag tools into order and hide tools from subscribers.
+- **Setup & Health**: database, keys and deployment checklist.
 
 The marketing site lives in [`marketing/`](./marketing) and is served separately.
 

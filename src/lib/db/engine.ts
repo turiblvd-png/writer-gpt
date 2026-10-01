@@ -1,5 +1,6 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { currentActor } from '@/lib/auth/actor';
 
 /**
  * Document store with two interchangeable drivers.
@@ -34,10 +35,25 @@ export interface StorageStatus {
 
 type Row = Record<string, unknown> & { id: string };
 
+/**
+ * Restricts reads to one owner's rows. `legacy` also admits rows saved before
+ * accounts existed (no ownerId), which belong to the site owner.
+ */
+export interface Scope {
+  ownerId: string;
+  legacy: boolean;
+}
+
+function inScope(row: Row, scope: Scope | null): boolean {
+  if (!scope) return true;
+  const owner = row.ownerId;
+  return owner === scope.ownerId || (scope.legacy && (owner === undefined || owner === null));
+}
+
 interface Driver {
   get(collection: string, id: string): Promise<Row | null>;
-  all(collection: string): Promise<Row[]>;
-  list(collection: string, sortBy: string, limit: number): Promise<Row[]>;
+  all(collection: string, scope?: Scope | null): Promise<Row[]>;
+  list(collection: string, sortBy: string, limit: number, scope?: Scope | null): Promise<Row[]>;
   put(collection: string, row: Row): Promise<void>;
   mutate(collection: string, id: string, change: (current: Row) => Row): Promise<Row | null>;
   remove(collection: string, id: string): Promise<void>;
@@ -176,11 +192,12 @@ class JsonDriver implements Driver {
   async get(c: string, id: string) {
     return this.table(c).get(id) ?? null;
   }
-  async all(c: string) {
-    return [...this.table(c).values()];
+  async all(c: string, scope: Scope | null = null) {
+    return [...this.table(c).values()].filter((r) => inScope(r, scope));
   }
-  async list(c: string, sortBy: string, limit: number) {
+  async list(c: string, sortBy: string, limit: number, scope: Scope | null = null) {
     return [...this.table(c).values()]
+      .filter((r) => inScope(r, scope))
       .sort((a, b) => Number(b[sortBy] ?? 0) - Number(a[sortBy] ?? 0))
       .slice(0, Math.max(0, limit));
   }
@@ -296,23 +313,30 @@ class PostgresDriver implements Driver {
     });
   }
 
-  async all(c: string) {
+  async all(c: string, scope: Scope | null = null) {
     return retryOnce(async () => {
       const db = await this.db();
-      const { rows } = await db.query('SELECT data FROM documents WHERE collection = $1', [c]);
+      const { rows } = scope
+        ? await db.query(
+            `SELECT data FROM documents WHERE collection = $1
+             AND (data->>'ownerId' = $2 OR ($3 AND data->>'ownerId' IS NULL))`,
+            [c, scope.ownerId, scope.legacy],
+          )
+        : await db.query('SELECT data FROM documents WHERE collection = $1', [c]);
       return rows.map((r) => r.data as Row);
     });
   }
 
-  async list(c: string, sortBy: string, limit: number) {
+  async list(c: string, sortBy: string, limit: number, scope: Scope | null = null) {
     return retryOnce(async () => {
       const db = await this.db();
       // sortBy is always a field name chosen in code, but pass it as a parameter
       // anyway so no caller can ever turn it into an injection.
       const { rows } = await db.query(
         `SELECT data FROM documents WHERE collection = $1
+         AND ($4::text IS NULL OR data->>'ownerId' = $4 OR ($5 AND data->>'ownerId' IS NULL))
          ORDER BY COALESCE((data->>$2)::numeric, 0) DESC LIMIT $3`,
-        [c, sortBy, Math.max(0, limit)],
+        [c, sortBy, Math.max(0, limit), scope?.ownerId ?? null, scope?.legacy ?? false],
       );
       return rows.map((r) => r.data as Row);
     });
@@ -419,22 +443,62 @@ function active(): Driver {
   return driver;
 }
 
+/**
+ * Collections shared by everyone (accounts, platform settings). Every other
+ * collection is private to its owner: a record is stamped with the signed-in
+ * user's id on write, and reads only return that user's records.
+ */
+export interface CollectionOptions {
+  global?: boolean;
+}
+
+async function scopeFor(options: CollectionOptions): Promise<Scope | null> {
+  if (options.global) return null;
+  const actor = await currentActor();
+  if (!actor) return null;
+  return { ownerId: actor.id, legacy: actor.role === 'owner' };
+}
+
+/** The id of the user the current code acts for, or null for the system. */
+export async function currentOwnerId(): Promise<string | null> {
+  return (await currentActor())?.id ?? null;
+}
+
 /** A typed view over one collection. Records must carry a string `id`. */
-export function collection<T extends { id: string }>(name: string) {
+export function collection<T extends { id: string }>(name: string, options: CollectionOptions = {}) {
+  const scoped = async (id: string): Promise<Row | null> => {
+    const row = await active().get(name, id);
+    return row && inScope(row, await scopeFor(options)) ? row : null;
+  };
+
   return {
-    all: async (): Promise<T[]> => (await active().all(name)) as unknown as T[],
-    get: async (id: string): Promise<T | null> => (await active().get(name, id)) as unknown as T | null,
+    all: async (): Promise<T[]> => (await active().all(name, await scopeFor(options))) as unknown as T[],
+    get: async (id: string): Promise<T | null> => (await scoped(id)) as unknown as T | null,
     /** Newest first by the given numeric field, then capped. */
     list: async (sortBy: keyof T & string, limit = 100): Promise<T[]> =>
-      (await active().list(name, sortBy, limit)) as unknown as T[],
+      (await active().list(name, sortBy, limit, await scopeFor(options))) as unknown as T[],
     put: async (record: T): Promise<T> => {
-      await active().put(name, record as unknown as Row);
-      return record;
+      const scope = await scopeFor(options);
+      let row = record as unknown as Row;
+      if (scope) {
+        const existing = await active().get(name, row.id);
+        // Never let one user overwrite another's record by reusing its id.
+        if (existing && !inScope(existing, scope)) throw new Error('Not found.');
+        if (!row.ownerId) row = { ...row, ownerId: (existing?.ownerId as string | undefined) ?? scope.ownerId };
+      }
+      await active().put(name, row);
+      return row as unknown as T;
     },
     /** Read, transform and write as one step, so concurrent callers cannot interleave. */
-    mutate: async (id: string, change: (current: T) => T): Promise<T | null> =>
-      (await active().mutate(name, id, change as unknown as (r: Row) => Row)) as unknown as T | null,
-    remove: async (id: string): Promise<void> => active().remove(name, id),
+    mutate: async (id: string, change: (current: T) => T): Promise<T | null> => {
+      const scope = await scopeFor(options);
+      if (scope && !(await scoped(id))) return null;
+      return (await active().mutate(name, id, change as unknown as (r: Row) => Row)) as unknown as T | null;
+    },
+    remove: async (id: string): Promise<void> => {
+      if (!(await scoped(id))) return;
+      await active().remove(name, id);
+    },
   };
 }
 

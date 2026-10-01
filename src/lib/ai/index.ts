@@ -1,35 +1,43 @@
+import { createHash } from 'node:crypto';
 import { GeminiProvider, OpenAiCompatProvider } from './gemini';
 import type { CompletionRequest, CompletionResult, LlmProvider, ProviderId } from './types';
+import { apiKeyFor, getAiSettings, PROVIDERS, ROLES, type ModelRole } from '@/lib/platform/settings';
+import { recordUsage } from '@/lib/usage/meter';
 
 export * from './types';
+export type { ModelRole };
 
 /**
- * Steps request a *role*, not a model. Roles are mapped to concrete models here,
- * so tuning cost/quality across the whole pipeline is a single-file change.
+ * Steps request a *role*, not a model. Which provider and model serve a role
+ * is decided, in order of precedence, by:
  *
- * - `research`  needs live grounding and citations. Must be a grounding provider.
- * - `reason`    planning, outlining, intent analysis. Quality over cost.
+ *  1. the developer dashboard (Developer → AI Models),
+ *  2. an environment override such as MODEL_DRAFT="deepseek:deepseek-flash",
+ *  3. the defaults below.
+ *
+ * - `research`  needs live grounding and citations (Gemini).
+ * - `reason`    planning, outlining, intent analysis.
  * - `draft`     long-form prose. The token-heavy role, so cost matters most.
- * - `structure` JSON extraction (metadata, schema, outlines). Cheap and strict.
+ * - `structure` JSON extraction (metadata, schema, outlines).
  * - `verify`    re-checks drafted claims against sources. Needs grounding.
  */
-export type ModelRole = 'research' | 'reason' | 'draft' | 'structure' | 'verify';
 
-interface RoleBinding {
+export interface RoleBinding {
   provider: ProviderId;
   model: string;
 }
 
-/**
- * Model IDs move fast. Override any role with an env var rather than editing
- * code, e.g. MODEL_DRAFT="deepseek:deepseek-chat".
- */
-const DEFAULT_BINDINGS: Record<ModelRole, RoleBinding> = {
-  research: { provider: 'gemini', model: 'gemini-2.5-flash' },
-  reason: { provider: 'gemini', model: 'gemini-2.5-pro' },
-  draft: { provider: 'gemini', model: 'gemini-2.5-flash' },
-  structure: { provider: 'gemini', model: 'gemini-2.5-flash' },
-  verify: { provider: 'gemini', model: 'gemini-2.5-flash' },
+/** The model each provider uses for a role when nothing else is chosen. */
+export const DEFAULT_MODELS: Record<ProviderId, Record<ModelRole, string>> = {
+  gemini: {
+    research: 'gemini-2.5-flash',
+    reason: 'gemini-2.5-pro',
+    draft: 'gemini-2.5-flash',
+    structure: 'gemini-2.5-flash',
+    verify: 'gemini-2.5-flash',
+  },
+  deepseek: { research: 'deepseek-flash', reason: 'deepseek-flash', draft: 'deepseek-flash', structure: 'deepseek-flash', verify: 'deepseek-flash' },
+  grok: { research: 'grok-4.3', reason: 'grok-4.3', draft: 'grok-4.3', structure: 'grok-4.3', verify: 'grok-4.3' },
 };
 
 const ENV_BY_ROLE: Record<ModelRole, string> = {
@@ -40,118 +48,180 @@ const ENV_BY_ROLE: Record<ModelRole, string> = {
   verify: 'MODEL_VERIFY',
 };
 
-function resolveBinding(role: ModelRole): RoleBinding {
+function parseEnvBinding(role: ModelRole): RoleBinding | null {
   const raw = process.env[ENV_BY_ROLE[role]];
-  if (!raw) return DEFAULT_BINDINGS[role];
-
+  if (!raw) return null;
   const [provider, ...rest] = raw.split(':');
   const model = rest.join(':');
   if (!provider || !model) {
-    throw new Error(
-      `${ENV_BY_ROLE[role]}="${raw}" is malformed. Expected "<provider>:<model>", e.g. "gemini:gemini-2.5-flash".`,
-    );
+    throw new Error(`${ENV_BY_ROLE[role]}="${raw}" is malformed. Expected "<provider>:<model>", e.g. "gemini:gemini-2.5-flash".`);
   }
-  if (provider !== 'gemini' && provider !== 'deepseek' && provider !== 'grok') {
-    throw new Error(`${ENV_BY_ROLE[role]} names unknown provider "${provider}".`);
-  }
-  return { provider, model };
+  if (!PROVIDERS.includes(provider as ProviderId)) throw new Error(`${ENV_BY_ROLE[role]} names unknown provider "${provider}".`);
+  return { provider: provider as ProviderId, model };
+}
+
+export type BindingSource = 'dashboard' | 'env' | 'default';
+
+export async function resolveBinding(role: ModelRole): Promise<RoleBinding & { source: BindingSource }> {
+  const chosen = (await getAiSettings()).roles[role];
+  if (chosen) return { ...chosen, source: 'dashboard' };
+  const env = parseEnvBinding(role);
+  if (env) return { ...env, source: 'env' };
+  return { provider: 'gemini', model: DEFAULT_MODELS.gemini[role], source: 'default' };
 }
 
 const cache = new Map<string, LlmProvider>();
 
-function buildProvider({ provider, model }: RoleBinding): LlmProvider {
-  const key = `${provider}:${model}`;
-  const hit = cache.get(key);
+export async function buildProvider({ provider, model }: RoleBinding): Promise<LlmProvider> {
+  const { key } = await apiKeyFor(provider);
+  // Keyed by a hash of the API key too, so a key changed in the dashboard
+  // takes effect without a redeploy.
+  const cacheKey = `${provider}:${model}:${createHash('sha256').update(key ?? '').digest('hex').slice(0, 12)}`;
+  const hit = cache.get(cacheKey);
   if (hit) return hit;
 
   let built: LlmProvider;
   switch (provider) {
     case 'gemini':
-      built = new GeminiProvider(process.env.GEMINI_API_KEY, model);
+      built = new GeminiProvider(key ?? undefined, model);
       break;
     case 'deepseek':
-      built = new OpenAiCompatProvider(
-        'deepseek',
-        process.env.DEEPSEEK_API_KEY,
-        process.env.DEEPSEEK_BASE_URL ?? 'https://api.deepseek.com/v1',
-        model,
-        'DEEPSEEK_API_KEY',
-      );
+      built = new OpenAiCompatProvider('deepseek', key ?? undefined, process.env.DEEPSEEK_BASE_URL ?? 'https://api.deepseek.com/v1', model, 'DEEPSEEK_API_KEY');
       break;
     case 'grok':
-      built = new OpenAiCompatProvider(
-        'grok',
-        process.env.XAI_API_KEY,
-        process.env.XAI_BASE_URL ?? 'https://api.x.ai/v1',
-        model,
-        'XAI_API_KEY',
-      );
+      built = new OpenAiCompatProvider('grok', key ?? undefined, process.env.XAI_BASE_URL ?? 'https://api.x.ai/v1', model, 'XAI_API_KEY');
       break;
   }
-  cache.set(key, built);
+  cache.set(cacheKey, built);
   return built;
-}
-
-export function providerFor(role: ModelRole): LlmProvider {
-  return buildProvider(resolveBinding(role));
 }
 
 const RETRYABLE = /\b(429|500|502|503|504|overloaded|unavailable|timeout|ECONNRESET|rate.?limit)\b/i;
 
-/**
- * Run a completion for a role, retrying transient upstream failures with
- * exponential backoff. A generation run is long and expensive; losing one at
- * step 11 to a transient 503 is the worst possible outcome.
- */
-export async function complete(
-  role: ModelRole,
-  req: CompletionRequest,
-  opts: { retries?: number } = {},
-): Promise<CompletionResult> {
-  const retries = opts.retries ?? 3;
-  const provider = providerFor(role);
+/** Errors no other provider would fix: the request itself is wrong or was cancelled. */
+const REQUEST_FAULT = /cannot combine JSON mode|declined this request under its safety|blocked: /i;
 
+const UNGROUNDED_NOTE =
+  'NOTE: live web search is unavailable for this step. Work from what you know, say so where facts may have changed, ' +
+  'and do not invent specific dates, prices or figures you are not sure of.\n\n';
+
+async function attempt(binding: RoleBinding, req: CompletionRequest, retries: number): Promise<CompletionResult> {
+  const provider = await buildProvider(binding);
   let lastError: unknown;
-  for (let attempt = 0; attempt <= retries; attempt++) {
+  for (let i = 0; i <= retries; i++) {
     try {
       return await provider.complete(req);
     } catch (err) {
       lastError = err;
       const message = err instanceof Error ? err.message : String(err);
-      // An aborted run and a misconfigured request will never succeed on retry.
       if (req.signal?.aborted) throw err;
       // The provider already stepped down through cheaper models and waited
       // where that helps; hammering an exhausted quota only burns more of it.
       if (err instanceof Error && err.name === 'QuotaExceededError') throw err;
-      if (attempt === retries || !RETRYABLE.test(message)) throw err;
-      await sleep(2 ** attempt * 800 + Math.random() * 400);
+      if (i === retries || !RETRYABLE.test(message)) throw err;
+      await sleep(2 ** i * 800 + Math.random() * 400);
     }
   }
   throw lastError;
+}
+
+/**
+ * Run a completion for a role. Transient failures are retried; a provider that
+ * fails outright (bad key, no quota, outage) hands over to the next provider in
+ * the dashboard's fallback order, so one broken key does not stop the product.
+ */
+export async function complete(role: ModelRole, req: CompletionRequest, opts: { retries?: number } = {}): Promise<CompletionResult> {
+  const retries = opts.retries ?? 3;
+  const settings = await getAiSettings();
+  const primary = await resolveBinding(role);
+
+  const candidates: { binding: RoleBinding; chosen: boolean }[] = [{ binding: primary, chosen: true }];
+  for (const p of settings.fallbackOrder) {
+    if (p !== primary.provider && (await apiKeyFor(p)).key) {
+      candidates.push({ binding: { provider: p, model: DEFAULT_MODELS[p][role] }, chosen: false });
+    }
+  }
+
+  const failures: string[] = [];
+  let firstError: unknown = null;
+
+  for (const { binding, chosen } of candidates) {
+    let request = req;
+    if (req.grounded && binding.provider !== 'gemini') {
+      // Only Gemini searches the web here. A non-search provider may stand in
+      // when the developer picked it for this task, or allowed it as a fallback.
+      if (!chosen && !settings.allowUngrounded) {
+        failures.push(`${binding.provider}: skipped, this step needs live search (allow it under Developer → AI Models)`);
+        continue;
+      }
+      request = { ...req, grounded: false, prompt: UNGROUNDED_NOTE + req.prompt };
+    }
+    try {
+      const result = await attempt(binding, request, chosen ? retries : 1);
+      await recordUsage(result.provider, result.model, result.usage);
+      return result;
+    } catch (err) {
+      if (req.signal?.aborted) throw err;
+      const message = err instanceof Error ? err.message : String(err);
+      if (REQUEST_FAULT.test(message)) throw err;
+      firstError ??= err;
+      failures.push(`${binding.provider}: ${message}`);
+    }
+  }
+
+  const primaryMessage = firstError instanceof Error ? firstError.message : 'The AI request failed.';
+  const others = failures.slice(1);
+  const error = new Error(others.length ? `${primaryMessage} Fallbacks also failed. ${others.join(' | ')}` : primaryMessage);
+  if (firstError instanceof Error) error.name = firstError.name;
+  throw error;
 }
 
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-/** Which providers have credentials present. Drives the Model Hub UI. */
-export function configuredProviders(): Record<ProviderId, boolean> {
-  return {
-    gemini: Boolean(process.env.GEMINI_API_KEY),
-    deepseek: Boolean(process.env.DEEPSEEK_API_KEY),
-    grok: Boolean(process.env.XAI_API_KEY),
-  };
+/** Which providers have a key, from the dashboard or the environment. */
+export async function configuredProviders(): Promise<Record<ProviderId, boolean>> {
+  const out = {} as Record<ProviderId, boolean>;
+  for (const p of PROVIDERS) out[p] = Boolean((await apiKeyFor(p)).key);
+  return out;
 }
 
-/** The model each role uses, for the Account page. Malformed overrides are reported, not thrown. */
-export function roleBindings(): { role: ModelRole; binding: string; overridden: boolean; error?: string }[] {
-  return (Object.keys(DEFAULT_BINDINGS) as ModelRole[]).map((role) => {
-    const overridden = Boolean(process.env[ENV_BY_ROLE[role]]);
+/** True when at least one provider can answer. Routes return 503 otherwise. */
+export async function aiReady(): Promise<boolean> {
+  return Object.values(await configuredProviders()).some(Boolean);
+}
+
+export const AI_NOT_READY =
+  'No AI provider is connected. Add a Gemini, DeepSeek or Grok API key under Developer → AI Models.';
+
+/** The model each role uses, for the dashboard. Malformed overrides are reported, not thrown. */
+export async function roleBindings(): Promise<{ role: ModelRole; binding: string; source: BindingSource | 'error'; error?: string }[]> {
+  const out = [];
+  for (const role of ROLES) {
     try {
-      const b = resolveBinding(role);
-      return { role, binding: `${b.provider}:${b.model}`, overridden };
+      const b = await resolveBinding(role);
+      out.push({ role, binding: `${b.provider}:${b.model}`, source: b.source });
     } catch (err) {
-      return { role, binding: process.env[ENV_BY_ROLE[role]] ?? '', overridden, error: err instanceof Error ? err.message : String(err) };
+      out.push({ role, binding: process.env[ENV_BY_ROLE[role]] ?? '', source: 'error' as const, error: err instanceof Error ? err.message : String(err) });
     }
-  });
+  }
+  return out;
+}
+
+/**
+ * Sends a tiny request straight to one provider and model, with no fallback,
+ * so the dashboard can show exactly why a key does or does not work.
+ */
+export async function testProvider(binding: RoleBinding): Promise<{ ok: boolean; ms: number; reply?: string; model?: string; error?: string; raw?: string }> {
+  const started = Date.now();
+  try {
+    const provider = await buildProvider(binding);
+    const res = await provider.complete({ prompt: 'Reply with the single word OK.', temperature: 0, exact: true });
+    return { ok: true, ms: Date.now() - started, reply: res.text.trim().slice(0, 80), model: res.model };
+  } catch (err) {
+    const cause = (err as { cause?: unknown }).cause;
+    const raw = String((cause as Error)?.message ?? cause ?? '').slice(0, 600);
+    return { ok: false, ms: Date.now() - started, error: err instanceof Error ? err.message : String(err), raw: raw || undefined };
+  }
 }

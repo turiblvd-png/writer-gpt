@@ -5,7 +5,8 @@
  */
 export type IconName =
   | 'grid' | 'spark' | 'robot' | 'library' | 'globe' | 'gear' | 'hub' | 'wand' | 'link'
-  | 'bolt' | 'chat' | 'radar' | 'key' | 'clipboard' | 'chart' | 'doc' | 'share' | 'calendar' | 'upload' | 'user';
+  | 'bolt' | 'chat' | 'radar' | 'key' | 'clipboard' | 'chart' | 'doc' | 'share' | 'calendar' | 'upload' | 'user'
+  | 'shield' | 'users' | 'drag';
 
 export interface NavItem {
   href: string;
@@ -13,10 +14,12 @@ export interface NavItem {
   icon: IconName;
   description: string;
   badge?: string;
+  /** Hidden from subscribers by the developer; only shown to admins. */
+  hidden?: boolean;
 }
 
 export interface NavSection {
-  id: 'dashboard' | 'create' | 'ai' | 'library' | 'publishing' | 'account';
+  id: 'dashboard' | 'create' | 'ai' | 'library' | 'publishing' | 'account' | 'developer';
   label: string;
   icon: IconName;
   items: NavItem[];
@@ -64,19 +67,62 @@ export const NAV: NavSection[] = [
   {
     id: 'account', label: 'Account', icon: 'gear',
     items: [
-      { href: '/account', label: 'Account & Setup', icon: 'user', description: 'Connection status, storage and usage.' },
+      { href: '/account', label: 'Account', icon: 'user', description: 'Your profile, usage and sign out.' },
+    ],
+  },
+  {
+    id: 'developer', label: 'Developer', icon: 'shield',
+    items: [
+      { href: '/admin', label: 'Overview', icon: 'grid', description: 'Subscribers, usage and AI spend at a glance.' },
+      { href: '/admin/ai', label: 'AI Models', icon: 'robot', description: 'API keys, models per task and fallback order.' },
+      { href: '/admin/subscribers', label: 'Subscribers', icon: 'users', description: 'Everyone who signed up, their plan and usage.' },
+      { href: '/admin/navigation', label: 'Menu & Tools', icon: 'drag', description: 'Drag to reorder tools; hide tools from subscribers.' },
+      { href: '/admin/setup', label: 'Setup & Health', icon: 'gear', description: 'Database, keys and deployment checklist.' },
     ],
   },
 ];
 
-export function sectionFor(pathname: string): NavSection {
-  if (pathname === '/') return NAV[0]!;
-  return (
-    NAV.find((s) => s.items.some((i) => i.href !== '/' && (pathname === i.href || pathname.startsWith(`${i.href}/`)))) ??
-    NAV[0]!
-  );
+/** Sections and items arranged by the developer's saved menu settings. */
+export function arrangeNav(
+  settings: { order: Record<string, string[]>; hidden: string[] },
+  isAdmin: boolean,
+  base: NavSection[] = NAV,
+): NavSection[] {
+  return base
+    .filter((s) => s.id !== 'developer' || isAdmin)
+    .map((section) => {
+      // Developer and dashboard items stay fixed so the dashboard can never be hidden away.
+      const fixed = section.id === 'developer' || section.id === 'dashboard' || section.id === 'account';
+      const order = fixed ? [] : settings.order[section.id] ?? [];
+      const rank = (href: string) => {
+        const i = order.indexOf(href);
+        return i === -1 ? order.length + section.items.findIndex((x) => x.href === href) : i;
+      };
+      const items = [...section.items]
+        .sort((a, b) => rank(a.href) - rank(b.href))
+        .map((item) => ({ ...item, hidden: !fixed && settings.hidden.includes(item.href) }))
+        .filter((item) => isAdmin || !item.hidden);
+      return { ...section, items };
+    })
+    .filter((s) => s.items.length > 0);
 }
 
-export function itemFor(pathname: string): NavItem | undefined {
-  return NAV.flatMap((s) => s.items).find((i) => (i.href === '/' ? pathname === '/' : pathname === i.href || pathname.startsWith(`${i.href}/`)));
+function matches(href: string, pathname: string): boolean {
+  return href === '/' ? pathname === '/' : pathname === href || pathname.startsWith(`${href}/`);
 }
+
+/** The most specific item for a path, so /admin/ai picks AI Models over Overview. */
+export function itemFor(pathname: string, sections: NavSection[] = NAV): NavItem | undefined {
+  return sections
+    .flatMap((s) => s.items)
+    .filter((i) => matches(i.href, pathname))
+    .sort((a, b) => b.href.length - a.href.length)[0];
+}
+
+export function sectionFor(pathname: string, sections: NavSection[] = NAV): NavSection {
+  const item = itemFor(pathname, sections);
+  return (item && sections.find((s) => s.items.includes(item))) ?? sections[0]!;
+}
+
+/** Every tool a subscriber could reach, for the menu editor. */
+export const EDITABLE_SECTIONS = NAV.filter((s) => !['developer', 'dashboard', 'account'].includes(s.id));

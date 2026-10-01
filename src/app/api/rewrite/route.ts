@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { configuredProviders } from '@/lib/ai';
+import { aiReady, AI_NOT_READY } from '@/lib/ai';
 import { rewriteFromUrl, RewriteError } from '@/lib/rewrite/rewrite';
 import { rewriteSchema } from '@/lib/rewrite/types';
 import { UnsafeUrlError } from '@/lib/semantic/extract';
@@ -8,9 +8,9 @@ export const runtime = 'nodejs';
 export const maxDuration = 300;
 
 export async function POST(request: Request) {
-  if (!configuredProviders().gemini) {
+  if (!(await aiReady())) {
     return NextResponse.json(
-      { error: 'No Gemini API key configured. Set GEMINI_API_KEY (see .env.example).' },
+      { error: AI_NOT_READY },
       { status: 503 },
     );
   }

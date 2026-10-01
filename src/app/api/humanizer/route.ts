@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { configuredProviders } from '@/lib/ai';
+import { aiReady, AI_NOT_READY } from '@/lib/ai';
 import { humanize, HumanizeError } from '@/lib/humanizer/humanize';
 import { humanizeSchema } from '@/lib/humanizer/types';
 import { getArticle } from '@/lib/db/store';
@@ -8,9 +8,9 @@ export const runtime = 'nodejs';
 export const maxDuration = 300;
 
 export async function POST(request: Request) {
-  if (!configuredProviders().gemini) {
+  if (!(await aiReady())) {
     return NextResponse.json(
-      { error: 'No Gemini API key configured. Set GEMINI_API_KEY (see .env.example).' },
+      { error: AI_NOT_READY },
       { status: 503 },
     );
   }

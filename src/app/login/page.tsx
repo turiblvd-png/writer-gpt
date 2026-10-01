@@ -1,4 +1,4 @@
-import { LoginForm } from './form';
+import { AuthForm } from './form';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Sign in · Writer-GPT' };
@@ -9,7 +9,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   const target = next && next.startsWith('/') && !next.startsWith('//') ? next : '/';
   return (
     <main className="grid min-h-screen place-items-center bg-canvas p-4">
-      <LoginForm next={target} />
+      <AuthForm mode="login" next={target} />
     </main>
   );
 }

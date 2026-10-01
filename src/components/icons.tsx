@@ -49,4 +49,7 @@ export const IconChat = (p: P) => <S {...p}><path d="M4 5h16v11H9l-5 4V5Z"/><pat
 export const IconShare = (p: P) => <S {...p}><circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="m8.2 10.8 7.6-4.4M8.2 13.2l7.6 4.4"/></S>;
 export const IconCalendar = (p: P) => <S {...p}><rect x="3.5" y="5" width="17" height="16" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></S>;
 export const IconUpload = (p: P) => <S {...p}><path d="M12 16V4M7 9l5-5 5 5M4 20h16"/></S>;
+export const IconShield = (p: P) => <S {...p}><path d="M12 3 4 6v6c0 4.5 3.4 8.3 8 9 4.6-.7 8-4.5 8-9V6l-8-3Z"/><path d="m9 12 2 2 4-4"/></S>;
+export const IconDrag = (p: P) => <S {...p}><circle cx="9" cy="6" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="18" r="1"/></S>;
+export const IconUsers = (p: P) => <S {...p}><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6 6 0 0 1 3.5 6"/></S>;
 export const IconUser = (p: P) => <S {...p}><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></S>;

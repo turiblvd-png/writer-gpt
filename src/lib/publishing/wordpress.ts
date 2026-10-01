@@ -1,4 +1,5 @@
-import { collection } from '@/lib/db/engine';
+import { collection, currentOwnerId } from '@/lib/db/engine';
+import { currentActor } from '@/lib/auth/actor';
 import { getArticle, saveArticle, type ArticleRecord } from '@/lib/db/store';
 import { renderMarkdown } from '@/lib/content/render';
 import { assertPublicUrl } from '@/lib/semantic/extract';
@@ -37,8 +38,17 @@ export class WordPressError extends Error {
 }
 
 type SavedConfig = { id: string; siteUrl: string; username: string; appPassword: string; updatedAt: number };
-const settings = collection<SavedConfig>('settings');
-const CONFIG_ID = 'wordpress';
+// Private per user: each subscriber connects their own site.
+const settings = collection<SavedConfig>('wp_connections');
+async function configId(): Promise<string> {
+  return `wordpress-${(await currentOwnerId()) ?? 'site'}`;
+}
+
+/** WP_* environment variables belong to the site owner, never to subscribers. */
+async function envAllowed(): Promise<boolean> {
+  const actor = await currentActor();
+  return !actor || actor.role === 'owner';
+}
 const TIMEOUT_MS = 20_000;
 
 export function normaliseSiteUrl(raw: string): string {
@@ -51,10 +61,10 @@ export function normaliseSiteUrl(raw: string): string {
 
 export async function getWpConfig(): Promise<WpConfig | null> {
   const { WP_URL, WP_USERNAME, WP_APP_PASSWORD } = process.env;
-  if (WP_URL && WP_USERNAME && WP_APP_PASSWORD) {
+  if (WP_URL && WP_USERNAME && WP_APP_PASSWORD && (await envAllowed())) {
     return { siteUrl: normaliseSiteUrl(WP_URL), username: WP_USERNAME, appPassword: WP_APP_PASSWORD, source: 'env' };
   }
-  const saved = await settings.get(CONFIG_ID);
+  const saved = await settings.get(await configId());
   return saved ? { siteUrl: saved.siteUrl, username: saved.username, appPassword: saved.appPassword, source: 'saved' } : null;
 }
 
@@ -138,16 +148,16 @@ export async function testConnection(config: Pick<WpConfig, 'siteUrl' | 'usernam
 }
 
 export async function saveWpConfig(input: { siteUrl: string; username: string; appPassword: string }): Promise<{ name: string; view: WpConfigView }> {
-  if (process.env.WP_URL) throw new WordPressError('WordPress is configured by environment variables. Change it in your hosting settings.');
+  if (process.env.WP_URL && (await envAllowed())) throw new WordPressError('WordPress is configured by environment variables. Change it in your hosting settings.');
   const config = { siteUrl: normaliseSiteUrl(input.siteUrl), username: input.username.trim(), appPassword: input.appPassword.trim() };
   if (!config.username || !config.appPassword) throw new WordPressError('Enter the username and Application Password.');
   const name = await testConnection(config);
-  await settings.put({ id: CONFIG_ID, ...config, updatedAt: Date.now() });
+  await settings.put({ id: await configId(), ...config, updatedAt: Date.now() });
   return { name, view: { siteUrl: config.siteUrl, username: config.username, source: 'saved', connected: true } };
 }
 
 export async function disconnectWp(): Promise<void> {
-  await settings.remove(CONFIG_ID);
+  await settings.remove(await configId());
 }
 
 /** WordPress shows the title itself, so the article's own H1 would appear twice. */

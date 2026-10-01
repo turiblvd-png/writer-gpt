@@ -81,6 +81,20 @@ describe.each(DRIVERS)('$name driver', ({ name, setup }) => {
     expect(loaded?.keywords).toEqual(['tennis']);
   });
 
+  it('keeps users to their own records', async () => {
+    const { saveArticle, listArticles, getArticle } = await import('./store');
+    const { runAs } = await import('@/lib/auth/actor');
+    const alice = { id: 'alice', email: 'a@x.co', role: 'subscriber' as const };
+    const owner = { id: 'owner', email: 'o@x.co', role: 'owner' as const };
+    await runAs(null, () => saveArticle(article('legacy', 'Before accounts')));
+    await runAs(alice, () => saveArticle(article('a1', 'Alice')));
+
+    expect((await runAs(alice, () => listArticles())).map((a) => a.id)).toEqual(['a1']);
+    expect((await runAs(owner, () => listArticles())).map((a) => a.id)).toEqual(['legacy']);
+    expect(await runAs(owner, () => getArticle('a1'))).toBeNull();
+    expect(await runAs(null, () => listArticles())).toHaveLength(2);
+  });
+
   it('returns null for a missing record, never a truthy placeholder', async () => {
     const { getArticle } = await import('./store');
     expect(await getArticle('nope')).toBeNull();

@@ -42,6 +42,8 @@ export interface CompletionRequest {
   /** URLs the model should read directly, when the provider supports it. */
   readUrls?: string[];
   signal?: AbortSignal;
+  /** Use exactly this model: no quota step-down. For the dashboard's key test. */
+  exact?: boolean;
 }
 
 export interface CompletionResult {
@@ -74,7 +76,7 @@ export class GroundingUnsupportedError extends Error {
 
 export class ProviderNotConfiguredError extends Error {
   constructor(provider: ProviderId, envVar: string) {
-    super(`Provider "${provider}" is not configured. Set ${envVar} in your environment.`);
+    super(`No ${provider} API key. Add one under Developer → AI Models (or set ${envVar}).`);
     this.name = 'ProviderNotConfiguredError';
   }
 }

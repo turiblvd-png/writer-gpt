@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { complete, configuredProviders } from '@/lib/ai';
+import { complete, aiReady, AI_NOT_READY } from '@/lib/ai';
 import { getAudit, saveAuditAdvice } from '@/lib/audit/audit';
 import { makeClock } from '@/lib/pipeline/engine';
 import { systemPreamble } from '@/lib/style/rules';
@@ -10,8 +10,8 @@ export const maxDuration = 120;
 
 /** Turns a measured audit into a prioritised fix plan. The scoring itself never needs a model. */
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
-  if (!configuredProviders().gemini) {
-    return NextResponse.json({ error: 'Set GEMINI_API_KEY to get an AI fix plan. The audit itself works without it.' }, { status: 503 });
+  if (!(await aiReady())) {
+    return NextResponse.json({ error: AI_NOT_READY }, { status: 503 });
   }
   const { id } = await params;
   const audit = await getAudit(id);

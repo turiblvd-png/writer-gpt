@@ -1,12 +1,22 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import { getViewer } from '@/lib/auth/viewer';
+import { ViewerProvider } from '@/components/viewer';
+import { BlockedScreen } from '@/components/blocked';
 
 export const metadata: Metadata = {
   title: 'Writer-GPT, AI SEO Content Engine',
   description: 'Research-grounded AI article generation with semantic SEO optimisation.',
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const viewer = await getViewer();
+  const value = {
+    sections: viewer.sections,
+    isAdmin: viewer.isAdmin,
+    user: viewer.user ? { name: viewer.user.name, email: viewer.user.email, role: viewer.user.role } : null,
+  };
+
   return (
     <html lang="en" className="dark" suppressHydrationWarning>
       <head>
@@ -23,7 +33,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           rel="stylesheet"
         />
       </head>
-      <body>{children}</body>
+      <body>
+        {viewer.blocked ? <BlockedScreen reason={viewer.blocked} /> : <ViewerProvider value={value}>{children}</ViewerProvider>}
+      </body>
     </html>
   );
 }

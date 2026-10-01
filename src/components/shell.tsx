@@ -3,7 +3,8 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { NAV, itemFor, sectionFor, type IconName, type NavSection } from '@/lib/nav';
+import { itemFor, sectionFor, type IconName, type NavSection } from '@/lib/nav';
+import { useViewer } from './viewer';
 import * as I from './icons';
 
 const ICONS: Record<IconName, (p: { className?: string }) => React.ReactElement> = {
@@ -11,6 +12,7 @@ const ICONS: Record<IconName, (p: { className?: string }) => React.ReactElement>
   gear: I.IconGear, hub: I.IconHub, wand: I.IconWand, link: I.IconLink, bolt: I.IconBolt, chat: I.IconChat,
   radar: I.IconRadar, key: I.IconKey, clipboard: I.IconClipboard, chart: I.IconChart, doc: I.IconDoc,
   share: I.IconShare, calendar: I.IconCalendar, upload: I.IconUpload, user: I.IconUser,
+  shield: I.IconShield, users: I.IconUsers, drag: I.IconDrag,
 };
 
 export function Icon({ name, className }: { name: IconName; className?: string }) {
@@ -25,7 +27,11 @@ export function Icon({ name, className }: { name: IconName; className?: string }
  */
 export function Shell({ children, banner }: { children: React.ReactNode; banner?: React.ReactNode }) {
   const pathname = usePathname();
-  const active = sectionFor(pathname);
+  const { sections, user, isAdmin } = useViewer();
+  const active = sectionFor(pathname, sections);
+  const current = itemFor(pathname, sections);
+  // A tool the developer hid from subscribers is not offered by direct URL either.
+  const unavailable = !isAdmin && sections.length > 0 && pathname !== '/' && !current && pathname !== '/account';
   const [drawer, setDrawer] = useState(false);
 
   // Close the mobile drawer on navigation.
@@ -33,7 +39,7 @@ export function Shell({ children, banner }: { children: React.ReactNode; banner?
 
   return (
     <div className="flex min-h-screen bg-canvas text-ink">
-      <Rail active={active} />
+      <Rail active={active} sections={sections} />
       {active.items.length > 1 && <SectionPanel section={active} pathname={pathname} />}
 
       {drawer && (
@@ -42,11 +48,11 @@ export function Shell({ children, banner }: { children: React.ReactNode; banner?
           <nav className="absolute inset-y-0 left-0 w-72 overflow-y-auto border-r border-line bg-surface p-4">
             <Brand />
             <div className="mt-5 space-y-5">
-              {NAV.map((section) => (
+              {sections.map((section) => (
                 <div key={section.id}>
                   <p className="mb-1.5 px-2 text-[11px] font-bold uppercase tracking-wider text-ink-3">{section.label}</p>
                   {section.items.map((item) => (
-                    <NavLink key={item.href} href={item.href} label={item.label} icon={item.icon} badge={item.badge} pathname={pathname} />
+                    <NavLink key={item.href} href={item.href} label={item.label} icon={item.icon} badge={item.hidden ? 'Hidden' : item.badge} pathname={pathname} />
                   ))}
                 </div>
               ))}
@@ -56,10 +62,18 @@ export function Shell({ children, banner }: { children: React.ReactNode; banner?
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <TopBar onMenu={() => setDrawer(true)} title={itemFor(pathname)?.label ?? 'Writer-GPT'} />
+        <TopBar onMenu={() => setDrawer(true)} title={current?.label ?? 'Writer-GPT'} user={user} />
         <main className="flex-1 px-4 py-6 sm:px-6 lg:px-10">
           {banner}
-          {children}
+          {unavailable ? (
+            <div className="card mx-auto mt-10 max-w-md p-7 text-center">
+              <h2 className="mb-2 text-lg font-bold">This tool is not available</h2>
+              <p className="mb-5 text-sm text-ink-3">It is not part of your workspace right now.</p>
+              <Link href="/" className="btn-primary">Back to dashboard</Link>
+            </div>
+          ) : (
+            children
+          )}
         </main>
       </div>
     </div>
@@ -79,7 +93,7 @@ function Brand() {
   );
 }
 
-function Rail({ active }: { active: NavSection }) {
+function Rail({ active, sections }: { active: NavSection; sections: NavSection[] }) {
   return (
     <aside className="sticky top-0 hidden h-screen w-[76px] shrink-0 flex-col items-center gap-1 border-r border-line bg-surface py-4 lg:flex">
       <Link href="/" aria-label="Dashboard" className="mb-4">
@@ -87,7 +101,7 @@ function Rail({ active }: { active: NavSection }) {
           W
         </span>
       </Link>
-      {NAV.map((section) => {
+      {sections.map((section) => {
         const on = section.id === active.id;
         return (
           <Link
@@ -115,7 +129,7 @@ function SectionPanel({ section, pathname }: { section: NavSection; pathname: st
       </div>
       <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-4">
         {section.items.map((item) => (
-          <NavLink key={item.href} href={item.href} label={item.label} icon={item.icon} badge={item.badge} pathname={pathname} />
+          <NavLink key={item.href} href={item.href} label={item.label} icon={item.icon} badge={item.hidden ? 'Hidden' : item.badge} pathname={pathname} />
         ))}
       </nav>
       <p className="border-t border-line px-5 py-4 text-[11px] text-ink-3">Research-grounded generation</p>
@@ -124,7 +138,9 @@ function SectionPanel({ section, pathname }: { section: NavSection; pathname: st
 }
 
 function NavLink({ href, label, icon, badge, pathname }: { href: string; label: string; icon: IconName; badge?: string; pathname: string }) {
-  const active = href === '/' ? pathname === '/' : pathname === href || pathname.startsWith(`${href}/`);
+  // Only the most specific item lights up, so /admin/ai does not also highlight /admin.
+  const { sections } = useViewer();
+  const active = itemFor(pathname, sections)?.href === href;
   return (
     <Link
       href={href}
@@ -140,7 +156,7 @@ function NavLink({ href, label, icon, badge, pathname }: { href: string; label: 
   );
 }
 
-function TopBar({ onMenu, title }: { onMenu: () => void; title: string }) {
+function TopBar({ onMenu, title, user }: { onMenu: () => void; title: string; user: { name: string; email: string } | null }) {
   return (
     <header className="sticky top-0 z-30 flex h-[68px] items-center gap-3 border-b border-line bg-canvas/85 px-4 backdrop-blur-xl sm:px-6 lg:px-10">
       <button className="rounded-lg p-2 text-ink-2 hover:bg-surface-2 lg:hidden" onClick={onMenu} aria-label="Open menu">
@@ -152,8 +168,9 @@ function TopBar({ onMenu, title }: { onMenu: () => void; title: string }) {
           <I.IconGlobe className="h-3.5 w-3.5" /> EN
         </span>
         <ThemeToggle />
-        <Link href="/account" aria-label="Account" className="grid h-9 w-9 place-items-center rounded-full bg-gradient-to-br from-accent to-accent-2 text-xs font-bold text-accent-ink">
-          <I.IconUser className="h-4 w-4" />
+        <Link href="/account" aria-label="Account" title={user ? `${user.name} (${user.email})` : 'Account'}
+              className="grid h-9 w-9 place-items-center rounded-full bg-gradient-to-br from-accent to-accent-2 text-xs font-bold uppercase text-accent-ink">
+          {user ? user.name.slice(0, 1) : <I.IconUser className="h-4 w-4" />}
         </Link>
       </div>
     </header>

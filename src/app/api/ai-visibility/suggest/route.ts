@@ -1,13 +1,13 @@
 import { NextResponse } from 'next/server';
-import { configuredProviders } from '@/lib/ai';
+import { aiReady, AI_NOT_READY } from '@/lib/ai';
 import { suggestQueries } from '@/lib/visibility/check';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
 
 export async function POST(request: Request) {
-  if (!configuredProviders().gemini) {
-    return NextResponse.json({ error: 'Set GEMINI_API_KEY to get suggestions.' }, { status: 503 });
+  if (!(await aiReady())) {
+    return NextResponse.json({ error: AI_NOT_READY }, { status: 503 });
   }
   const body = (await request.json().catch(() => ({}))) as { topic?: string; brand?: string };
   if (!body.topic?.trim()) return NextResponse.json({ error: 'Enter a topic first.' }, { status: 400 });

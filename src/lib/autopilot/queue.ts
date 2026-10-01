@@ -4,6 +4,7 @@ import { runPipeline } from '@/lib/pipeline/engine';
 import { generateContentPipeline, initialGenerateState } from '@/lib/pipelines/generate-content';
 import { persistGeneratedArticle } from '@/lib/content/persist';
 import { generateInputSchema, type SeoMode } from '@/lib/content/types';
+import { currentActor, runAs, type Actor } from '@/lib/auth/actor';
 
 /**
  * Autopilot: a queue of keywords written one at a time by the Generate Content
@@ -126,6 +127,22 @@ export async function runNext(signal?: AbortSignal): Promise<TickResult> {
   const item = await claimNext();
   if (!item) return { item: null, remaining: await countQueued() };
 
+  // The cron runs as the system and sees every queue; the article must still
+  // be written and saved as the user who queued the keyword.
+  const ownerId = (item as AutopilotItem & { ownerId?: string }).ownerId;
+  const caller = await currentActor();
+  const owner: Actor | null = ownerId
+    ? caller?.id === ownerId ? caller : { id: ownerId, email: '', role: 'subscriber' }
+    : caller;
+
+  const finished = await runAs(owner, () => writeItem(item, signal));
+
+  // Only write back if this tick still owns the item.
+  const saved = await runAs(owner, () => store.mutate(item.id, (current) => (current.claim === item.claim ? finished : current)));
+  return { item: saved ?? finished, remaining: await countQueued() };
+}
+
+async function writeItem(item: AutopilotItem, signal?: AbortSignal): Promise<AutopilotItem> {
   let finished: AutopilotItem;
   try {
     const snapshot = await runPipeline({
@@ -146,10 +163,7 @@ export async function runNext(signal?: AbortSignal): Promise<TickResult> {
       finishedAt: Date.now(),
     };
   }
-
-  // Only write back if this tick still owns the item.
-  const saved = await store.mutate(item.id, (current) => (current.claim === item.claim ? finished : current));
-  return { item: saved ?? finished, remaining: await countQueued() };
+  return finished;
 }
 
 async function countQueued(): Promise<number> {

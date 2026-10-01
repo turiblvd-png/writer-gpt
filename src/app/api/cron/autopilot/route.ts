@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
-import { configuredProviders } from '@/lib/ai';
+import { aiReady, AI_NOT_READY } from '@/lib/ai';
 import { runNext } from '@/lib/autopilot/queue';
+import { runAs } from '@/lib/auth/actor';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -17,8 +18,9 @@ export async function GET(request: Request) {
   if (request.headers.get('authorization') !== `Bearer ${secret}`) {
     return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
   }
-  if (!configuredProviders().gemini) return NextResponse.json({ error: 'GEMINI_API_KEY is not set.' }, { status: 503 });
+  if (!(await aiReady())) return NextResponse.json({ error: AI_NOT_READY }, { status: 503 });
 
-  const tick = await runNext(request.signal);
+  // The system, so the tick sees every user's queue.
+  const tick = await runAs(null, () => runNext(request.signal));
   return NextResponse.json({ ran: tick.item?.keyword ?? null, status: tick.item?.status ?? 'idle', remaining: tick.remaining });
 }
