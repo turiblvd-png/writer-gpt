@@ -26,6 +26,10 @@ export interface StorageStatus {
   error: string | null;
   /** True when each server instance keeps its own copy, so data is not shared. */
   perInstance: boolean;
+  /** Which environment variable the database URL came from. */
+  source?: string | null;
+  /** Database-looking variable names present, values never included. */
+  envNames?: string[];
 }
 
 type Row = Record<string, unknown> & { id: string };
@@ -45,8 +49,47 @@ const SERVERLESS =
   Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME) ||
   Boolean(process.env.NETLIFY);
 
+const POSTGRES_VALUE = /^postgres(ql)?:\/\//i;
+
+/**
+ * Names checked first, best first. Pooled URLs beat direct ones: serverless
+ * functions open many short connections, which is what the pooler is for.
+ */
+const PREFERRED_NAMES = ['DATABASE_URL', 'POSTGRES_URL', 'POSTGRES_PRISMA_URL', 'NEON_DATABASE_URL', 'SUPABASE_DB_URL'];
+
+/**
+ * Finds the database connection string under whatever name the host used.
+ *
+ * Vercel's storage dialog lets the user choose a prefix for the variables it
+ * creates, so a connected Neon database can arrive as STORAGE_URL or
+ * MYDB_DATABASE_URL instead of DATABASE_URL. Matching on the value rather than
+ * one fixed name means connecting the database is enough, whatever it was called.
+ */
+export function findDatabaseEnv(env: NodeJS.ProcessEnv = process.env): { name: string; url: string } | null {
+  for (const name of PREFERRED_NAMES) {
+    const url = env[name];
+    if (url && POSTGRES_VALUE.test(url)) return { name, url };
+  }
+  const candidates = Object.entries(env)
+    .filter((e): e is [string, string] => typeof e[1] === 'string' && POSTGRES_VALUE.test(e[1]))
+    .sort(([a], [b]) => rank(a) - rank(b) || a.localeCompare(b));
+  return candidates[0] ? { name: candidates[0][0], url: candidates[0][1] } : null;
+}
+
+/** Lower is better: direct (unpooled) and no-SSL variants are fallbacks only. */
+function rank(name: string): number {
+  if (/UNPOOLED|NON_POOLING|DIRECT/i.test(name)) return 2;
+  if (/NO_SSL/i.test(name)) return 3;
+  return /URL$/i.test(name) ? 0 : 1;
+}
+
+/** Names of variables that look database-related, for diagnostics. Never values. */
+export function databaseEnvNames(env: NodeJS.ProcessEnv = process.env): string[] {
+  return Object.keys(env).filter((k) => /DATABASE|POSTGRES|^PG(HOST|USER|DATABASE)$|NEON/i.test(k)).sort();
+}
+
 export function databaseUrl(): string | null {
-  return process.env.DATABASE_URL || process.env.POSTGRES_URL || null;
+  return findDatabaseEnv()?.url ?? null;
 }
 
 export function resolveDataFile(): string {
@@ -330,7 +373,8 @@ class PostgresDriver implements Driver {
 
   async status(): Promise<StorageStatus> {
     try {
-      await this.db();
+      // A real round trip: the pool can exist while the database is unreachable.
+      await retryOnce(async () => (await this.db()).query('SELECT 1'));
       return { mode: 'postgres', driver: 'postgres', path: redact(this.url), error: this.error, perInstance: false };
     } catch (err) {
       return { mode: 'postgres', driver: 'postgres', path: redact(this.url), error: message(err), perInstance: false };
@@ -395,7 +439,7 @@ export function collection<T extends { id: string }>(name: string) {
 }
 
 export async function storageStatus(): Promise<StorageStatus> {
-  return active().status();
+  return { ...(await active().status()), source: findDatabaseEnv()?.name ?? null, envNames: databaseEnvNames() };
 }
 
 /**

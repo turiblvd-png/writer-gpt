@@ -257,3 +257,28 @@ describe('postgres connection loss', () => {
     expect(isConnectionLost(new Error('duplicate key value violates unique constraint'))).toBe(false);
   });
 });
+
+describe('finding the database setting', () => {
+  it('uses the standard names first', async () => {
+    const { findDatabaseEnv } = await import('./engine');
+    expect(findDatabaseEnv({ DATABASE_URL: 'postgres://a', POSTGRES_URL: 'postgres://b' } as never)?.name).toBe('DATABASE_URL');
+  });
+
+  it('finds a database connected under a custom prefix, preferring the pooled URL', async () => {
+    const { findDatabaseEnv } = await import('./engine');
+    const env = {
+      STORAGE_URL_UNPOOLED: 'postgresql://direct',
+      STORAGE_URL: 'postgresql://pooled',
+      STORAGE_URL_NO_SSL: 'postgres://nossl',
+      OTHER: 'https://example.com',
+    };
+    expect(findDatabaseEnv(env as never)).toEqual({ name: 'STORAGE_URL', url: 'postgresql://pooled' });
+  });
+
+  it('ignores names whose value is not a postgres address', async () => {
+    const { findDatabaseEnv, databaseEnvNames } = await import('./engine');
+    const env = { DATABASE_URL: '', PGHOST: 'ep-x.neon.tech', NEON_PROJECT_ID: 'p1' };
+    expect(findDatabaseEnv(env as never)).toBeNull();
+    expect(databaseEnvNames(env as never)).toEqual(['DATABASE_URL', 'NEON_PROJECT_ID', 'PGHOST']);
+  });
+});

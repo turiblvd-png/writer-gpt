@@ -1,36 +1,55 @@
 import { storageStatus } from '@/lib/db/store';
 
 /**
- * Tells the user when their data will not be kept.
+ * Tells the user when their data will not be kept, and exactly how to fix it.
  *
- * On a serverless host only /tmp is writable, and that is wiped on every cold
- * start, so articles and projects disappear without explanation. Saying so is
- * better than letting someone build a 14-stage project that vanishes.
+ * On a serverless host each instance has its own throwaway disk, so a project
+ * saved by one request is invisible to the next. Only a shared database fixes
+ * that, and only the site owner can create one in their hosting account, so
+ * the banner gives the steps plus what the app can currently see.
  */
 export async function StorageBanner() {
-  const { mode, error, perInstance } = await storageStatus();
-  // A shared database or a persistent disk needs no warning.
-  if (mode === 'persistent' || mode === 'postgres') return null;
+  const status = await storageStatus();
+  const { mode, error, perInstance, envNames = [] } = status;
+
+  if (mode === 'postgres' && !error) return null;
+  if (mode === 'persistent') return null;
+
+  if (mode === 'postgres') {
+    return (
+      <div className="mb-5 rounded-xl border border-bad/30 bg-bad/10 p-4 text-sm" role="status">
+        <p className="font-semibold text-bad">The database is connected but not answering</p>
+        <p className="mt-1 text-ink-2">
+          The app found a database in <code className="font-mono text-xs">{status.source}</code> but could not reach it.
+          In Vercel open Storage, check the Neon database is active and still connected to this project, then redeploy.
+        </p>
+        <p className="mt-1.5 font-mono text-[11px] text-ink-3">{error}</p>
+      </div>
+    );
+  }
 
   return (
     <div
-      className={`mb-5 rounded-xl border p-4 text-sm ${
-        mode === 'memory' ? 'border-bad/30 bg-bad/10' : 'border-warn/30 bg-warn/10'
-      }`}
+      className={`mb-5 rounded-xl border p-4 text-sm ${mode === 'memory' || perInstance ? 'border-bad/30 bg-bad/10' : 'border-warn/30 bg-warn/10'}`}
       role="status"
     >
       <p className={`font-semibold ${perInstance ? 'text-bad' : 'text-warn'}`}>
-        {perInstance ? 'Saving will not work reliably on this host' : 'Temporary storage'}
+        {perInstance ? 'No database connected, so saving does not work on Vercel' : 'Temporary storage'}
       </p>
       <p className="mt-1 text-ink-2">
-        {mode === 'memory'
-          ? 'The data file could not be opened, so nothing is being saved at all.'
-          : perInstance
-            ? 'This host runs the app across separate instances that do not share a disk, so a project saved by one request can be invisible to the next. Creating a project may appear to fail even when it succeeded.'
-            : 'This host only allows writes to a temporary directory, so saved work is lost whenever the server restarts.'}{' '}
-        The writing tools themselves work. To save work reliably, connect a Postgres database (on Vercel:
-        Storage, then create a Neon Postgres database, then redeploy) so{' '}
-        <code className="rounded bg-surface-3 px-1 py-0.5 font-mono text-xs text-accent-2">DATABASE_URL</code> is set.
+        {perInstance
+          ? 'Vercel runs this site as many separate copies, each with its own throwaway disk. Without a shared database, what one copy saves the next one cannot see. This is a one-time setup in your Vercel account:'
+          : 'This host only writes to a temporary directory, so saved work is lost when the server restarts. Connect a Postgres database:'}
+      </p>
+      <ol className="mt-2 list-decimal space-y-1 pl-5 text-ink-2">
+        <li>Open vercel.com, then this project, then the <strong className="text-ink">Storage</strong> tab.</li>
+        <li>Click <strong className="text-ink">Create Database</strong>, choose <strong className="text-ink">Neon</strong> (free plan), accept, and click <strong className="text-ink">Connect</strong> with all environments ticked.</li>
+        <li>Open <strong className="text-ink">Deployments</strong>, click the three dots on the top deployment, then <strong className="text-ink">Redeploy</strong>. New settings only reach new deployments.</li>
+      </ol>
+      <p className="mt-2 text-xs text-ink-3">
+        {envNames.length
+          ? <>Database-like settings this deployment can see: <code className="font-mono">{envNames.join(', ')}</code>, but none holds a postgres:// address.</>
+          : 'This deployment sees no database settings at all. If you already connected one, it was added after this deployment was built: redeploy.'}
       </p>
       {error && <p className="mt-1.5 font-mono text-[11px] text-ink-3">{error}</p>}
     </div>
