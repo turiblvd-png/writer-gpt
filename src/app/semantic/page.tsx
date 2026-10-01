@@ -19,7 +19,8 @@ const FEATURES = [
   `${STEPS.length}-step workflow`,
 ];
 
-export default async function SemanticLandingPage() {
+export default async function SemanticLandingPage({ searchParams }: { searchParams: Promise<{ keyword?: string }> }) {
+  const { keyword } = await searchParams;
   const projects = await safeRead(() => listProjects(), [], 'listProjects');
 
   return (
@@ -52,7 +53,7 @@ export default async function SemanticLandingPage() {
       </section>
 
       <div className="grid gap-5 lg:grid-cols-2">
-        <NewProjectForm />
+        <NewProjectForm initialKeyword={typeof keyword === 'string' ? keyword.slice(0, 200) : ''} />
 
         <section className="card p-6">
           <h3 className="text-lg font-bold">Recent projects</h3>

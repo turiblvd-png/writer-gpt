@@ -7,11 +7,11 @@ import { Spinner } from '@/components/semantic-ui';
 
 const LANGUAGES = ['English', 'Spanish', 'French', 'German', 'Portuguese', 'Italian', 'Dutch', 'Arabic', 'Hindi', 'Urdu'];
 
-export function NewProjectForm() {
+export function NewProjectForm({ initialKeyword = '' }: { initialKeyword?: string }) {
   const router = useRouter();
   const [language, setLanguage] = useState('English');
   const [name, setName] = useState('');
-  const [mainKeyword, setMainKeyword] = useState('');
+  const [mainKeyword, setMainKeyword] = useState(initialKeyword);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

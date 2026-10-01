@@ -218,3 +218,91 @@ const collapse = (s: string) => s.replace(/\s+/g, ' ').trim();
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
 export { assertPublicUrl };
+
+export interface ExtractedPage {
+  url: string;
+  domain: string;
+  title: string;
+  metaDescription: string;
+  /** Article body as markdown: headings, paragraphs, list items, tables flattened. */
+  markdown: string;
+  words: number;
+  /** Outbound links found in the article body, for the audit's link check. */
+  links: { href: string; text: string; internal: boolean }[];
+  images: { src: string; alt: string }[];
+  error?: string;
+}
+
+/**
+ * Pure HTML → page conversion, kept separate from fetching so it can be tested
+ * without the network. The head is read before chrome is stripped, because the
+ * title and meta description live there and are what search results show.
+ */
+export function htmlToPage(html: string, url: string): ExtractedPage {
+  const domain = safeDomain(url);
+  const raw = parse(html);
+  const title = collapse(raw.querySelector('title')?.text ?? '');
+  const metaDescription = collapse(
+    raw.querySelector('meta[name="description"]')?.getAttribute('content') ??
+      raw.querySelector('meta[property="og:description"]')?.getAttribute('content') ??
+      '',
+  );
+
+  const root = contentRoot(cleanRoot(html));
+  const lines: string[] = [];
+  const seen = new Set<string>();
+
+  for (const el of root.querySelectorAll('h1,h2,h3,h4,h5,h6,p,li,blockquote')) {
+    const text = collapse(el.structuredText || el.text);
+    if (!text || seen.has(text)) continue;
+    const tag = el.rawTagName.toLowerCase();
+    if (/^h[1-6]$/.test(tag)) {
+      if (text.length > 220) continue;
+      lines.push(`${'#'.repeat(Number(tag[1]))} ${text}`);
+    } else if (tag === 'li') {
+      if (text.length < 3) continue;
+      lines.push(`- ${text}`);
+    } else {
+      if (text.length < 20) continue;
+      lines.push(text);
+    }
+    seen.add(text);
+  }
+
+  const markdown = lines.join('\n\n');
+  const words = (markdown.match(/[\p{L}\p{N}][\p{L}\p{N}'’-]*/gu) ?? []).length;
+
+  const links = root.querySelectorAll('a[href]').flatMap((a) => {
+    const href = a.getAttribute('href') ?? '';
+    if (!href || href.startsWith('#') || /^(mailto|tel|javascript):/i.test(href)) return [];
+    try {
+      const abs = new URL(href, url);
+      return [{ href: abs.toString(), text: collapse(a.text).slice(0, 120), internal: safeDomain(abs.toString()) === domain }];
+    } catch {
+      return [];
+    }
+  });
+
+  const images = root.querySelectorAll('img').map((img) => ({
+    src: img.getAttribute('src') ?? '',
+    alt: collapse(img.getAttribute('alt') ?? ''),
+  })).filter((i) => i.src);
+
+  return { url, domain, title, metaDescription, markdown, words, links, images };
+}
+
+export async function extractPage(rawUrl: string): Promise<ExtractedPage> {
+  try {
+    const { html, finalUrl } = await fetchHtml(rawUrl);
+    const page = htmlToPage(html, finalUrl);
+    if (page.words < 50) {
+      return { ...page, error: 'Page had no extractable article text. It may be rendered by JavaScript in the browser.' };
+    }
+    return page;
+  } catch (err) {
+    return {
+      url: rawUrl, domain: safeDomain(rawUrl), title: '', metaDescription: '', markdown: '', words: 0,
+      links: [], images: [], error: message(err),
+    };
+  }
+}

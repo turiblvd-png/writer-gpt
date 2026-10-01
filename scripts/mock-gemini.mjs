@@ -53,6 +53,28 @@ No. It is an exhibition, so results never touch the ATP rankings.
 At ANB Arena in Riyadh, during Riyadh Season.`;
 
 function answer(prompt) {
+  if (/List 8 questions real customers would ask/i.test(prompt))
+    return JSON.stringify({ queries: ['how much are six kings slam tickets', 'where to buy six kings slam tickets', 'six kings slam 2026 schedule', 'is the six kings slam worth attending'] });
+  if (/Report what you find, plainly/i.test(prompt))
+    return 'WHO RANKS: riyadhseason.com (official), netflix.com, en.wikipedia.org, enjoy.sa.\nSERP FEATURES: People Also Ask, news.\nRELATED: six kings slam 2026 dates, six kings slam tickets price.';
+  if (/Turn this into keyword clusters/i.test(prompt))
+    return JSON.stringify({
+      clusters: [
+        { name: 'Tickets and prices', intent: 'transactional', keywords: [
+          { term: 'six kings slam tickets', intent: 'transactional', difficulty: 'high', note: 'Official seller ranks first.' },
+          { term: 'six kings slam ticket prices 2026', intent: 'commercial', difficulty: 'medium', note: 'No page lists prices by night.' },
+          { term: 'cheapest six kings slam tickets', intent: 'transactional', difficulty: 'low', note: 'Forums only.' } ] },
+        { name: 'Dates and schedule', intent: 'informational', keywords: [
+          { term: 'six kings slam 2026 dates', intent: 'informational', difficulty: 'medium', note: 'Answer in the first line.' },
+          { term: 'six kings slam schedule', intent: 'informational', difficulty: 'medium', note: 'A table wins the snippet.' } ] },
+        { name: 'How to watch', intent: 'informational', keywords: [
+          { term: 'how to watch six kings slam', intent: 'informational', difficulty: 'high', note: 'Netflix owns it.' } ] },
+      ],
+      questions: ['how much are six kings slam tickets', 'when is the six kings slam 2026', 'is the six kings slam on netflix'],
+      serpFeatures: ['People Also Ask', 'Top stories'],
+      competitors: ['riyadhseason.com', 'netflix.com', 'en.wikipedia.org'],
+      angle: 'A ticket guide broken down by night, with prices and what each session includes.',
+    });
   if (/Research the topic|Research ".*" against live search|research brief the writer/i.test(prompt) && /STATUS NOW/i.test(prompt))
     return 'STATUS NOW: The 2026 edition runs 21 to 24 October at ANB Arena, Riyadh.\nKEY FACTS: Netflix streams it. Field: Sinner, Alcaraz, Djokovic, Zverev, Fritz, de Minaur.\nRECENT CHANGES: Venue name is ANB Arena.\nOPEN QUESTIONS: Exact ticket prices per tier are UNVERIFIED.';
   if (/analyse search intent/i.test(prompt))
@@ -110,7 +132,11 @@ createServer((req, res) => {
         finishReason: 'STOP',
         ...(grounded ? { groundingMetadata: {
           webSearchQueries: ['six kings slam 2026'],
-          groundingChunks: [{ web: { uri: 'https://www.riyadhseason.com/six-kings-slam', title: 'Riyadh Season', domain: 'riyadhseason.com' } }],
+          groundingChunks: [
+            { web: { uri: 'https://vertexaisearch.cloud.google.com/grounding-api-redirect/a1', title: 'riyadhseason.com', domain: 'riyadhseason.com' } },
+            ...(/tickets/i.test(prompt) ? [{ web: { uri: 'https://vertexaisearch.cloud.google.com/grounding-api-redirect/b2', title: 'riyadhticketsmap.com' } }] : []),
+            { web: { uri: 'https://vertexaisearch.cloud.google.com/grounding-api-redirect/c3', title: 'en.wikipedia.org' } },
+          ],
         } } : {}),
       }],
       usageMetadata: { promptTokenCount: Math.ceil(prompt.length / 4), candidatesTokenCount: Math.ceil(text.length / 4), totalTokenCount: Math.ceil((prompt.length + text.length) / 4) },

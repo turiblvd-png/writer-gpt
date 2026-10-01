@@ -1,8 +1,9 @@
 import type { Config } from 'tailwindcss';
 
 /**
- * Tokens mirror the writer-gpt.com dashboard: near-black navy canvas, a slightly
- * raised sidebar, and a blue→cyan accent used for the active nav item and CTAs.
+ * Colours are CSS variables (see globals.css) so the light/dark toggle swaps
+ * every surface at once. Each is an "r g b" triple, which keeps Tailwind's
+ * opacity modifiers (bg-accent/10) working.
  */
 export default {
   darkMode: 'class',
@@ -10,22 +11,22 @@ export default {
   theme: {
     extend: {
       colors: {
-        canvas: '#070b14',
-        surface: '#0b1220',
-        'surface-2': '#111a2b',
-        'surface-3': '#18243a',
-        line: '#1e2b42',
-        'line-soft': '#16213a',
-        ink: '#e8eefc',
-        'ink-2': '#93a4c4',
-        'ink-3': '#5f7192',
-        accent: '#1d9bf0',
-        'accent-2': '#22d3ee',
-        'accent-ink': '#04121f',
-        ok: '#22c55e',
-        warn: '#f59e0b',
-        bad: '#ef4444',
-        info: '#8b5cf6',
+        'canvas': 'rgb(var(--c-canvas) / <alpha-value>)',
+        'surface': 'rgb(var(--c-surface) / <alpha-value>)',
+        'surface-2': 'rgb(var(--c-surface-2) / <alpha-value>)',
+        'surface-3': 'rgb(var(--c-surface-3) / <alpha-value>)',
+        'line': 'rgb(var(--c-line) / <alpha-value>)',
+        'line-soft': 'rgb(var(--c-line-soft) / <alpha-value>)',
+        'ink': 'rgb(var(--c-ink) / <alpha-value>)',
+        'ink-2': 'rgb(var(--c-ink-2) / <alpha-value>)',
+        'ink-3': 'rgb(var(--c-ink-3) / <alpha-value>)',
+        'accent': 'rgb(var(--c-accent) / <alpha-value>)',
+        'accent-2': 'rgb(var(--c-accent-2) / <alpha-value>)',
+        'accent-ink': 'rgb(var(--c-accent-ink) / <alpha-value>)',
+        'ok': 'rgb(var(--c-ok) / <alpha-value>)',
+        'warn': 'rgb(var(--c-warn) / <alpha-value>)',
+        'bad': 'rgb(var(--c-bad) / <alpha-value>)',
+        'info': 'rgb(var(--c-info) / <alpha-value>)',
       },
       borderRadius: { xl: '0.75rem', '2xl': '1rem' },
       fontFamily: {

@@ -26,11 +26,11 @@ interface Snapshot {
   state?: { warnings?: string[]; meta?: { seoTitle?: string } };
 }
 
-export function GenerateWizard() {
+export function GenerateWizard({ initialTopic = '' }: { initialTopic?: string }) {
   const router = useRouter();
   const [stage, setStage] = useState<1 | 2 | 3>(1);
 
-  const [topic, setTopic] = useState('');
+  const [topic, setTopic] = useState(initialTopic);
   const [language, setLanguage] = useState('English');
   const [seoMode, setSeoMode] = useState<SeoMode>('full-seo');
   const [targetWords, setTargetWords] = useState(1800);

@@ -3,8 +3,46 @@
 @tailwind utilities;
 
 @layer base {
-  :root { --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif; }
-  html { color-scheme: dark; }
+  :root {
+    --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+    /* Light theme */
+    --c-canvas: 244 247 252;
+    --c-surface: 255 255 255;
+    --c-surface-2: 241 245 251;
+    --c-surface-3: 228 234 244;
+    --c-line: 214 223 237;
+    --c-line-soft: 229 235 245;
+    --c-ink: 15 23 42;
+    --c-ink-2: 61 78 105;
+    --c-ink-3: 103 119 145;
+    --c-accent: 14 132 222;
+    --c-accent-2: 8 168 200;
+    --c-accent-ink: 255 255 255;
+    --c-ok: 22 150 75;
+    --c-warn: 202 120 6;
+    --c-bad: 210 45 45;
+    --c-info: 118 75 225;
+    color-scheme: light;
+  }
+  :root.dark {
+    --c-canvas: 7 11 20;
+    --c-surface: 11 18 32;
+    --c-surface-2: 17 26 43;
+    --c-surface-3: 24 36 58;
+    --c-line: 30 43 66;
+    --c-line-soft: 22 33 58;
+    --c-ink: 232 238 252;
+    --c-ink-2: 147 164 196;
+    --c-ink-3: 95 113 146;
+    --c-accent: 29 155 240;
+    --c-accent-2: 34 211 238;
+    --c-accent-ink: 4 18 31;
+    --c-ok: 34 197 94;
+    --c-warn: 245 158 11;
+    --c-bad: 239 68 68;
+    --c-info: 139 92 246;
+    color-scheme: dark;
+  }
   body { @apply bg-canvas text-ink antialiased; }
   ::selection { @apply bg-accent/30 text-ink; }
   *:focus-visible { @apply outline-none ring-2 ring-accent/70 ring-offset-2 ring-offset-canvas; }
