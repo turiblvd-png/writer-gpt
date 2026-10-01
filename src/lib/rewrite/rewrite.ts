@@ -49,7 +49,7 @@ export async function rewriteFromUrl(
   const language = input.targetLanguage === 'same' ? sourceLanguage : input.targetLanguage;
   const system = systemPreamble(clock, language);
 
-  const voice = input.brandVoiceId === 'auto' ? null : getBrandVoice(input.brandVoiceId);
+  const voice = input.brandVoiceId === 'auto' ? null : await getBrandVoice(input.brandVoiceId);
   let inferredVoice: string | null = null;
 
   if (!voice) {

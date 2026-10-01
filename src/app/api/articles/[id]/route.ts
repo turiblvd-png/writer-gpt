@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const article = safeRead(() => getArticle(id), null, 'getArticle');
+  const article = await safeRead(() => getArticle(id), null, 'getArticle');
   if (!article) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
   const report = analyseSeo({
@@ -24,6 +24,6 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 
 export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  deleteArticle(id);
+  await deleteArticle(id);
   return NextResponse.json({ ok: true });
 }

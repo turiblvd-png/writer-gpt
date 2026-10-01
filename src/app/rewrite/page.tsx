@@ -7,13 +7,14 @@ import { StorageBanner } from '@/components/storage-banner';
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Rewrite from URL · Writer-GPT' };
 
-export default function RewritePage() {
+export default async function RewritePage() {
   // Seed the starter voices once so the picker is never empty on first visit.
-  const voices = safeRead(() => seedDefaultVoices(), [], 'seedDefaultVoices');
+  const voices = await safeRead(() => seedDefaultVoices(), [], 'seedDefaultVoices');
+  const history = await safeRead(() => listRewritten(), [], 'listRewritten');
 
   return (
     <Shell banner={<StorageBanner />}>
-      <RewriteWorkspace voices={voices} initialHistory={safeRead(() => listRewritten(), [], 'listRewritten')} />
+      <RewriteWorkspace voices={voices} initialHistory={history} />
     </Shell>
   );
 }

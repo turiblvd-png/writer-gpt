@@ -143,7 +143,7 @@ export function freshnessChecks(input: SeoInput, plain: string): Check[] {
   checks.push(
     mentionsCurrent
       ? { id: 'freshness-current-year', category: 'freshness', status: 'good', autoFixable: false,
-          message: `Content references the current year (${year}). Good — the angle matches live search intent.` }
+          message: `Content references the current year (${year}). Good, the angle matches live search intent.` }
       : { id: 'freshness-current-year', category: 'freshness', status: 'bad', autoFixable: true,
           message: newest
             ? `Topic is time-sensitive but the newest year mentioned is ${newest}, not ${year}. This reads as a retrospective and will lose to pages targeting ${year}.`
@@ -152,7 +152,7 @@ export function freshnessChecks(input: SeoInput, plain: string): Check[] {
 
   if (/\b(20\d{2})\b/.test(input.focusKeyword) && !/\b(20\d{2})\b/.test(input.title)) {
     checks.push({ id: 'freshness-title-year', category: 'freshness', status: 'warn', autoFixable: true,
-      message: 'Focus keyword contains a year but the SEO title does not. Add it — year modifiers are high-intent.' });
+      message: 'Focus keyword contains a year but the SEO title does not. Add it, year modifiers are high-intent.' });
   }
 
   return checks;
@@ -227,10 +227,10 @@ export function analyseSeo(input: SeoInput): SeoReport {
   if (!subheads.length) add('subheadings', 'structure', 'bad', 'No subheadings found. Break the article up with H2s.', true);
   else if (subPct >= 30 && subPct <= 75) add('subheadings-keyword', 'structure', 'good', `${subWithKw}/${subheads.length} subheadings (${subPct}%) contain the keyphrase. Good!`);
   else if (subPct < 30) add('subheadings-keyword', 'structure', 'warn', `Only ${subWithKw}/${subheads.length} subheadings (${subPct}%) contain the keyphrase. Aim for 30–75%.`, true);
-  else add('subheadings-keyword', 'structure', 'warn', `${subPct}% of subheadings contain the keyphrase — that reads as stuffing. Aim for 30–75%.`, true);
+  else add('subheadings-keyword', 'structure', 'warn', `${subPct}% of subheadings contain the keyphrase, that reads as stuffing. Aim for 30–75%.`, true);
 
   if (stats.h3 === 0 && stats.h2 > 6) {
-    add('heading-depth', 'structure', 'warn', `${stats.h2} H2s and no H3s — the outline is flat. Nest detail under H3s so sections are scannable.`, true);
+    add('heading-depth', 'structure', 'warn', `${stats.h2} H2s and no H3s, the outline is flat. Nest detail under H3s so sections are scannable.`, true);
   }
 
   if (totalWords < 300) add('content-length', 'structure', 'bad', `Only ${totalWords} words. Too thin to compete.`, true);
@@ -251,7 +251,7 @@ export function analyseSeo(input: SeoInput): SeoReport {
   if (kwCount === 0) add('density', 'keyword', 'bad', 'Focus keyword never appears in the body.', true);
   else if (density < 0.5) add('density', 'keyword', 'warn', `Keyword density is ${density}% (${kwCount} uses). A little low.`, true);
   else if (density <= 2.5) add('density', 'keyword', 'good', `Keyword density is ${density}% (${kwCount} uses). Good!`);
-  else add('density', 'keyword', 'bad', `Keyword density is ${density}% (${kwCount} uses) — that reads as stuffing.`, true);
+  else add('density', 'keyword', 'bad', `Keyword density is ${density}% (${kwCount} uses), that reads as stuffing.`, true);
 
   // ---- Readability -------------------------------------------------------
   const passivePct = Math.round(passive * 100);

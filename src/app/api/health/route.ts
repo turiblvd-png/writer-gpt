@@ -19,7 +19,7 @@ export async function GET() {
   try {
     // Probe an actual write: reads can succeed while writes fail, which is how
     // "Create project" broke while every page rendered normally.
-    storage = { ...storageStatus(), ...probeStorage() };
+    storage = { ...(await storageStatus()), ...(await probeStorage()) };
   } catch (err) {
     storage = {
       mode: 'memory', path: 'none', perInstance: true, writable: false,

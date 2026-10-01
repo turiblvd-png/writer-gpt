@@ -9,9 +9,9 @@ import { StorageBanner } from '@/components/storage-banner';
 
 export const dynamic = 'force-dynamic';
 
-export default function DashboardPage() {
+export default async function DashboardPage() {
   const providers = configuredProviders();
-  const articles = safeRead(() => listArticles(5), [], 'listArticles');
+  const articles = await safeRead(() => listArticles(5), [], 'listArticles');
   const totalWords = articles.reduce((sum, a) => sum + a.wordCount, 0);
 
   const tools = [

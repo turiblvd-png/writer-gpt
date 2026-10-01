@@ -28,14 +28,14 @@ export class ProjectNotFoundError extends Error {
   }
 }
 
-function load(id: string): SemanticProject {
-  const project = getProject(id);
+async function load(id: string): Promise<SemanticProject> {
+  const project = await getProject(id);
   if (!project) throw new ProjectNotFoundError();
   return project;
 }
 
-function save(id: string, data: Partial<ProjectData>): SemanticProject {
-  const next = updateProject(id, { data });
+async function save(id: string, data: Partial<ProjectData>): Promise<SemanticProject> {
+  const next = await updateProject(id, { data });
   if (!next) throw new ProjectNotFoundError();
   return next;
 }
@@ -57,18 +57,18 @@ function corpusText(project: SemanticProject, limit = 60000): string {
 // ── Stage 2: outline ────────────────────────────────────────────────────────
 
 export async function extractOutlines(id: string, urls?: string[]): Promise<SemanticProject> {
-  const project = load(id);
+  const project = await load(id);
   const targets = urls?.length ? urls : project.data.competitors.map((c) => c.url);
 
   const results = await Promise.all(targets.map((url) => extractOutline(url)));
 
   // Replace results for the URLs just fetched, keep the rest.
   const kept = project.data.outlines.filter((o) => !targets.includes(o.url));
-  return save(id, { outlines: [...kept, ...results] });
+  return await save(id, { outlines: [...kept, ...results] });
 }
 
 export async function combineOutlines(id: string): Promise<SemanticProject> {
-  const project = load(id);
+  const project = await load(id);
   const usable = project.data.outlines.filter((o) => o.headings.length > 0);
   if (!usable.length) {
     throw new Error('No competitor outlines extracted yet. Run extraction first, or add headings manually.');
@@ -93,7 +93,7 @@ export async function combineOutlines(id: string): Promise<SemanticProject> {
     : [];
 
   if (!headings.length) throw new Error('The model returned no usable headings.');
-  return save(id, { combinedOutline: headings });
+  return await save(id, { combinedOutline: headings });
 }
 
 const clampLevel = (n: number) => (Number.isFinite(n) ? Math.max(1, Math.min(6, Math.round(n))) : 2);
@@ -101,7 +101,7 @@ const clampLevel = (n: number) => (Number.isFinite(n) ? Math.max(1, Math.min(6, 
 // ── Stage 4: competitor content ─────────────────────────────────────────────
 
 export async function extractCompetitorContent(id: string, urls?: string[]): Promise<SemanticProject> {
-  const project = load(id);
+  const project = await load(id);
   const targets = urls?.length ? urls : project.data.competitors.map((c) => c.url);
 
   const results = await Promise.all(targets.map((url) => extractContent(url)));
@@ -135,11 +135,11 @@ export async function extractCompetitorContent(id: string, urls?: string[]): Pro
     };
   }
 
-  return save(id, patch);
+  return await save(id, patch);
 }
 
 export async function analyseCompetitorStyle(id: string): Promise<SemanticProject> {
-  const project = load(id);
+  const project = await load(id);
   const corpus = corpusText(project, 40000);
   if (!corpus) throw new Error('No competitor content extracted yet.');
 
@@ -147,7 +147,7 @@ export async function analyseCompetitorStyle(id: string): Promise<SemanticProjec
     prompt: P.contentAnalysisPrompt(project, corpus, makeClock()),
     temperature: 0.4,
   });
-  return save(id, { contentAnalysis: res.text.trim() });
+  return await save(id, { contentAnalysis: res.text.trim() });
 }
 
 // ── Stage 5: entities ───────────────────────────────────────────────────────
@@ -155,7 +155,7 @@ export async function analyseCompetitorStyle(id: string): Promise<SemanticProjec
 export type EntityScope = 'all' | 'competitor' | 'ai' | 'unique';
 
 export async function generateEntities(id: string, scope: EntityScope = 'all'): Promise<SemanticProject> {
-  const project = load(id);
+  const project = await load(id);
   const docs = corpusDocs(project);
 
   const res = await complete('reason', {
@@ -179,7 +179,7 @@ export async function generateEntities(id: string, scope: EntityScope = 'all'): 
   const retained = scope === 'all' ? [] : project.data.entities.filter((e) => e.source !== scope);
 
   const merged = dedupeEntities([...retained, ...fresh]);
-  return save(id, { entities: annotateEntities(merged, docs) });
+  return await save(id, { entities: annotateEntities(merged, docs) });
 }
 
 function dedupeEntities(entities: Entity[]): Entity[] {
@@ -195,34 +195,34 @@ function dedupeEntities(entities: Entity[]): Entity[] {
 
 // ── Stages 6–8: deterministic corpus analysis ───────────────────────────────
 
-export function computeNgrams(id: string): SemanticProject {
-  const project = load(id);
+export async function computeNgrams(id: string): Promise<SemanticProject> {
+  const project = await load(id);
   const docs = corpusDocs(project);
-  if (!docs.length) throw new Error('Extract competitor content first — n-grams are counted from it.');
-  return save(id, { ngrams: extractNGrams(docs, 3, 2).slice(0, 150) });
+  if (!docs.length) throw new Error('Extract competitor content first, n-grams are counted from it.');
+  return await save(id, { ngrams: extractNGrams(docs, 3, 2).slice(0, 150) });
 }
 
-export function computeNlpKeywords(id: string): SemanticProject {
-  const project = load(id);
+export async function computeNlpKeywords(id: string): Promise<SemanticProject> {
+  const project = await load(id);
   const docs = corpusDocs(project);
-  if (!docs.length) throw new Error('Extract competitor content first — salience is measured against it.');
-  return save(id, { nlpKeywords: extractNlpKeywords(docs, 80) });
+  if (!docs.length) throw new Error('Extract competitor content first, salience is measured against it.');
+  return await save(id, { nlpKeywords: extractNlpKeywords(docs, 80) });
 }
 
-export function computeSkipGrams(id: string): SemanticProject {
-  const project = load(id);
+export async function computeSkipGrams(id: string): Promise<SemanticProject> {
+  const project = await load(id);
   const docs = corpusDocs(project);
-  if (!docs.length) throw new Error('Extract competitor content first — skip-grams are counted from it.');
-  return save(id, { skipGrams: extractSkipGrams(docs, 4, 3).slice(0, 80) });
+  if (!docs.length) throw new Error('Extract competitor content first, skip-grams are counted from it.');
+  return await save(id, { skipGrams: extractSkipGrams(docs, 4, 3).slice(0, 80) });
 }
 
 /** Re-run every measurement at once after content changes. */
-export function recomputeAll(id: string): SemanticProject {
-  const project = load(id);
+export async function recomputeAll(id: string): Promise<SemanticProject> {
+  const project = await load(id);
   const docs = corpusDocs(project);
   if (!docs.length) throw new Error('Extract competitor content first.');
 
-  return save(id, {
+  return await save(id, {
     ngrams: extractNGrams(docs, 3, 2).slice(0, 150),
     nlpKeywords: extractNlpKeywords(docs, 80),
     skipGrams: extractSkipGrams(docs, 4, 3).slice(0, 80),
@@ -233,7 +233,7 @@ export function recomputeAll(id: string): SemanticProject {
 // ── Stage 9: questions ──────────────────────────────────────────────────────
 
 export async function generateQuestions(id: string): Promise<SemanticProject> {
-  const project = load(id);
+  const project = await load(id);
   const res = await complete('research', {
     prompt: P.questionsPrompt(project, makeClock()),
     grounded: true,
@@ -247,14 +247,14 @@ export async function generateQuestions(id: string): Promise<SemanticProject> {
     .slice(0, 20);
 
   if (!questions.length) throw new Error('No questions returned.');
-  return save(id, { autoSuggest: questions });
+  return await save(id, { autoSuggest: questions });
 }
 
 // ── Stage 12: mega prompt ───────────────────────────────────────────────────
 
-export function compileMegaPrompt(id: string): SemanticProject {
-  const project = load(id);
-  return save(id, { megaPrompt: buildMegaPrompt(project, makeClock()) });
+export async function compileMegaPrompt(id: string): Promise<SemanticProject> {
+  const project = await load(id);
+  return await save(id, { megaPrompt: buildMegaPrompt(project, makeClock()) });
 }
 
 // ── Stage 13/14: generate and verify ────────────────────────────────────────
@@ -264,7 +264,7 @@ export interface GenerateProgress {
 }
 
 export async function generateArticle(id: string, onProgress?: GenerateProgress): Promise<SemanticProject> {
-  const project = load(id);
+  const project = await load(id);
   const clock = makeClock();
 
   if (!project.data.combinedOutline.length) {
@@ -288,7 +288,7 @@ export async function generateArticle(id: string, onProgress?: GenerateProgress)
       megaPrompt,
       '',
       '═'.repeat(70),
-      'RESEARCH — YOUR ONLY SOURCE OF FACTS',
+      'RESEARCH: YOUR ONLY SOURCE OF FACTS',
       '═'.repeat(70),
       research.text,
     ].join('\n'),
@@ -321,7 +321,7 @@ export async function generateArticle(id: string, onProgress?: GenerateProgress)
     slug = slugify(parsed.slug?.trim() || seoTitle);
   } catch {
     // Metadata is recoverable by hand; a finished article is not worth losing.
-    onProgress?.('metadata', 'Metadata generation failed — using the H1 as the title.');
+    onProgress?.('metadata', 'Metadata generation failed, using the H1 as the title.');
   }
 
   onProgress?.('verify', 'Fact-checking the draft…');
@@ -337,7 +337,7 @@ export async function generateArticle(id: string, onProgress?: GenerateProgress)
       unverifiedClaims = parsed.claims
         .filter((c): c is Record<string, unknown> => typeof c === 'object' && c !== null)
         .filter((c) => c.verdict !== 'supported')
-        .map((c) => `${String(c.text ?? '')}${c.note ? ` — ${String(c.note)}` : ''}`)
+        .map((c) => `${String(c.text ?? '')}${c.note ? `, ${String(c.note)}` : ''}`)
         .filter((t) => t.trim().length > 0);
     }
   } catch {
@@ -355,7 +355,7 @@ export async function generateArticle(id: string, onProgress?: GenerateProgress)
   };
 
   onProgress?.('done', `${analyseDocument(markdown).words} words written.`);
-  return save(id, { article, megaPrompt });
+  return await save(id, { article, megaPrompt });
 }
 
 function stripFences(text: string): string {

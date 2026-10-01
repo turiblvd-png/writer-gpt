@@ -6,5 +6,5 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
-  return NextResponse.json({ articles: safeRead(() => listRewritten(), [], 'listRewritten') });
+  return NextResponse.json({ articles: await safeRead(() => listRewritten(), [], 'listRewritten') });
 }

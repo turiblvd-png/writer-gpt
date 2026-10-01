@@ -61,7 +61,7 @@ export const generateContentPipeline: Pipeline<GenerateState> = {
         if (res.sources.length === 0) {
           // Every downstream step trusts this brief. Ungrounded, it is memory.
           warnings.push(
-            'Research returned no citations. Facts in this article are unverified — review before publishing.',
+            'Research returned no citations. Facts in this article are unverified, review before publishing.',
           );
           ctx.log('WARNING: no sources returned; downstream facts are unverified.');
         }
@@ -227,7 +227,7 @@ export const generateContentPipeline: Pipeline<GenerateState> = {
         }
         ctx.log(
           claims.length
-            ? `Checked ${claims.length} claims — ${claims.length - suspect.length} supported, ${suspect.length} flagged.`
+            ? `Checked ${claims.length} claims, ${claims.length - suspect.length} supported, ${suspect.length} flagged.`
             : 'No checkable claims extracted.',
         );
         return { claims, warnings };

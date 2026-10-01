@@ -70,14 +70,14 @@ export function buildMegaPrompt(
 
     sections.push(
       section('ENTITY COVERAGE', [
-        'Name these entities explicitly and correctly. Entities are how search engines classify a page — referring to something vaguely does not count as covering it.',
+        'Name these entities explicitly and correctly. Entities are how search engines classify a page, referring to something vaguely does not count as covering it.',
         '',
         ...(required.length
-          ? ['REQUIRED (named by two or more ranking competitors — the article is incomplete without them):',
+          ? ['REQUIRED (named by two or more ranking competitors, the article is incomplete without them):',
              ...required.map((e) => `- ${e.name}${e.documentFrequency ? ` [in ${e.documentFrequency} competitor pages]` : ''}`), '']
           : []),
         ...(optional.length
-          ? ['WORTH INCLUDING (differentiators — these are where you beat the competitors):',
+          ? ['WORTH INCLUDING (differentiators, these are where you beat the competitors):',
              ...optional.map((e) => `- ${e.name}`)]
           : []),
       ]),
@@ -97,7 +97,7 @@ export function buildMegaPrompt(
   if (keywords.length) {
     sections.push(
       section('HIGH-SALIENCE TERMS', [
-        'Ranked by TF-IDF against the competitor corpus — these define the topic rather than merely appearing in it.',
+        'Ranked by TF-IDF against the competitor corpus, these define the topic rather than merely appearing in it.',
         '',
         keywords.map((k) => k.term).join(', '),
       ]),
@@ -216,7 +216,7 @@ export function reviewWarnings(project: SemanticProject): { blocking: string[]; 
   const blocking: string[] = [];
   const advisory: string[] = [];
 
-  if (!s.competitors) blocking.push('No competitor URLs added — there is nothing to build the brief from.');
+  if (!s.competitors) blocking.push('No competitor URLs added, there is nothing to build the brief from.');
   if (!s.headings) blocking.push('No outline. Extract competitor outlines or add headings manually.');
 
   if (!s.contentExtracted) {

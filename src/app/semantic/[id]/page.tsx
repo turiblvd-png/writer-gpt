@@ -10,13 +10,13 @@ export const dynamic = 'force-dynamic';
 
 export default async function SemanticProjectPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const project = safeRead(() => getProject(id), null, 'getProject');
+  const project = await safeRead(() => getProject(id), null, 'getProject');
 
   if (!project) {
     // A bare 404 here is misleading. On a host where each instance keeps its own
     // storage, the project genuinely was created, just not on the instance
     // serving this request, and the user needs to know that is what happened.
-    const { perInstance } = storageStatus();
+    const { perInstance } = await storageStatus();
 
     return (
       <Shell banner={<StorageBanner />}>

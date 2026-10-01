@@ -13,7 +13,7 @@ const schema = z.object({
 });
 
 export async function GET() {
-  return NextResponse.json({ voices: safeRead(() => listBrandVoices(), [], 'listBrandVoices') });
+  return NextResponse.json({ voices: await safeRead(() => listBrandVoices(), [], 'listBrandVoices') });
 }
 
 export async function POST(request: Request) {
@@ -31,5 +31,5 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   }
-  return NextResponse.json({ voice: createBrandVoice(parsed.data) }, { status: 201 });
+  return NextResponse.json({ voice: await createBrandVoice(parsed.data) }, { status: 201 });
 }

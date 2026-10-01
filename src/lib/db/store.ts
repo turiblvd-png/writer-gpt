@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import type { Source } from '@/lib/ai';
-import { collection, probeStorage, resolveDataFile, storageStatus, type StorageMode } from './engine';
+import { collection, probeStorage, resolveDataFile, storageStatus, type StorageMode, type StorageStatus } from './engine';
 
-export { storageStatus, probeStorage, resolveDataFile, type StorageMode };
+export { storageStatus, probeStorage, resolveDataFile, type StorageMode, type StorageStatus };
 
 export interface ArticleRecord {
   id: string;
@@ -36,26 +36,26 @@ export interface RunRecord {
 const articles = collection<ArticleRecord>('articles');
 const runs = collection<RunRecord>('runs');
 
-export function saveArticle(a: Omit<ArticleRecord, 'createdAt' | 'updatedAt'>): ArticleRecord {
+export async function saveArticle(a: Omit<ArticleRecord, 'createdAt' | 'updatedAt'>): Promise<ArticleRecord> {
   const now = Date.now();
   // Preserve the original creation time when overwriting an existing article.
-  const existing = articles.get(a.id);
+  const existing = await articles.get(a.id);
   return articles.put({ ...a, createdAt: existing?.createdAt ?? now, updatedAt: now });
 }
 
-export function listArticles(limit = 100): ArticleRecord[] {
+export async function listArticles(limit = 100): Promise<ArticleRecord[]> {
   return articles.list('createdAt', limit);
 }
 
-export function getArticle(id: string): ArticleRecord | null {
+export async function getArticle(id: string): Promise<ArticleRecord | null> {
   return articles.get(id);
 }
 
-export function deleteArticle(id: string): void {
-  articles.remove(id);
+export async function deleteArticle(id: string): Promise<void> {
+  await articles.remove(id);
 }
 
-export function saveRun(r: {
+export async function saveRun(r: {
   id: string;
   pipelineId: string;
   articleId?: string | null;
@@ -63,10 +63,10 @@ export function saveRun(r: {
   progress: number;
   snapshot: unknown;
   error?: string | null;
-}): void {
+}): Promise<void> {
   const now = Date.now();
-  const existing = runs.get(r.id);
-  runs.put({
+  const existing = await runs.get(r.id);
+  await runs.put({
     id: r.id,
     pipelineId: r.pipelineId,
     articleId: r.articleId ?? null,
@@ -79,11 +79,11 @@ export function saveRun(r: {
   });
 }
 
-export function getRun(id: string): RunRecord | null {
+export async function getRun(id: string): Promise<RunRecord | null> {
   return runs.get(id);
 }
 
-export function listRuns(limit = 50): RunRecord[] {
+export async function listRuns(limit = 50): Promise<RunRecord[]> {
   return runs.list('createdAt', limit);
 }
 

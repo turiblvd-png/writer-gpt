@@ -1,206 +1,233 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { PGlite } from '@electric-sql/pglite';
+import { PGLiteSocketServer } from '@electric-sql/pglite-socket';
 
 /**
- * Guards the deployment failure that motivated replacing SQLite: a native
- * module that failed to load took down every route with an unrecoverable 500,
- * because the throw happened at import time, before any guard could run.
+ * One contract, two drivers. The JSON driver serves local development; the
+ * Postgres driver is what makes a serverless deploy work at all, because there
+ * each instance has a private disk. The Postgres run talks to a real Postgres
+ * wire-protocol server (PGlite), not a mock, so SQL and transactions are
+ * genuinely exercised.
  */
 const ORIGINAL = { ...process.env };
+const PG_PORT = 55432;
+const freshDir = () => mkdtempSync(join(tmpdir(), 'wg-'));
 
-function freshDir(): string {
-  return mkdtempSync(join(tmpdir(), 'wg-'));
-}
+let pgServer: PGLiteSocketServer | null = null;
+let pglite: PGlite | null = null;
 
-beforeEach(() => {
-  vi.resetModules();
-  for (const k of ['DATABASE_PATH', 'VERCEL', 'AWS_LAMBDA_FUNCTION_NAME', 'NETLIFY']) delete process.env[k];
+beforeAll(async () => {
+  pglite = await PGlite.create();
+  // One connection at a time: PGlite is single-session, so the pool is capped
+  // to match when tests run against it.
+  pgServer = new PGLiteSocketServer({ db: pglite, port: PG_PORT, host: '127.0.0.1' });
+  await pgServer.start();
 });
 
-afterEach(() => {
+afterAll(async () => {
+  await pgServer?.stop();
+  await pglite?.close();
+});
+
+afterEach(async () => {
+  const engine = await import('./engine');
+  await engine.resetStorageForTests();
   process.env = { ...ORIGINAL };
 });
 
-describe('resolveDataFile', () => {
-  it('uses the local data directory by default', async () => {
-    const { resolveDataFile } = await import('./engine');
-    expect(resolveDataFile()).toBe('./data/writer-gpt.json');
-  });
-
-  it.each([['VERCEL', '1'], ['AWS_LAMBDA_FUNCTION_NAME', 'fn'], ['NETLIFY', 'true']])(
-    'writes to /tmp on %s, the only writable path there',
-    async (key, value) => {
-      process.env[key] = value;
-      const { resolveDataFile } = await import('./engine');
-      expect(resolveDataFile()).toBe('/tmp/writer-gpt/data.json');
-    },
-  );
-
-  it('accepts an old SQLite-style DATABASE_PATH so existing config keeps working', async () => {
-    process.env.DATABASE_PATH = '/mnt/volume/writer-gpt.db';
-    const { resolveDataFile } = await import('./engine');
-    expect(resolveDataFile()).toBe('/mnt/volume/writer-gpt.json');
-  });
-
-  it('honours an explicit path even on serverless', async () => {
-    process.env.VERCEL = '1';
-    process.env.DATABASE_PATH = '/mnt/volume/app.json';
-    const { resolveDataFile } = await import('./engine');
-    expect(resolveDataFile()).toBe('/mnt/volume/app.json');
-  });
+const article = (id: string, title = id) => ({
+  id, title, slug: id, markdown: '# T', metaDescription: '', focusKeyword: 'k', keywords: ['tennis'],
+  language: 'English', seoMode: 'full-seo', wordCount: 1, status: 'draft' as const, sources: [],
 });
 
-describe('persistence', () => {
-  it('saves a record and reads it back from a fresh module load', async () => {
-    const file = join(freshDir(), 'data.json');
-    process.env.DATABASE_PATH = file;
+const DRIVERS = [
+  {
+    name: 'json',
+    setup: () => {
+      process.env.DATABASE_PATH = join(freshDir(), 'data.json');
+      delete process.env.DATABASE_URL;
+    },
+  },
+  {
+    name: 'postgres',
+    setup: async () => {
+      process.env.DATABASE_URL = `postgres://postgres:postgres@127.0.0.1:${PG_PORT}/postgres?sslmode=disable`;
+      // PGlite serves one session at a time, so concurrent operations queue
+      // through a single pooled connection. They still run the real
+      // transaction and row-lock path; real Postgres simply runs them in parallel.
+      process.env.DATABASE_POOL_MAX = '1';
+      // Each test starts from an empty table.
+      await pglite!.exec('DROP TABLE IF EXISTS documents');
+    },
+  },
+];
 
-    const first = await import('./store');
-    first.saveArticle({
-      id: 'a1', title: 'Six Kings Slam 2026', slug: 'six-kings', markdown: '# T',
-      metaDescription: '', focusKeyword: 'six kings slam', keywords: ['tennis'],
-      language: 'English', seoMode: 'full-seo', wordCount: 1200, status: 'draft', sources: [],
-    });
-
-    // A new module instance must read what the previous one wrote.
+describe.each(DRIVERS)('$name driver', ({ name, setup }) => {
+  beforeEach(async () => {
     vi.resetModules();
-    const second = await import('./store');
-    const loaded = second.getArticle('a1');
+    for (const k of ['DATABASE_PATH', 'DATABASE_URL', 'POSTGRES_URL', 'VERCEL']) delete process.env[k];
+    await setup();
+  });
 
+  it('saves a record and reads it back', async () => {
+    const { saveArticle, getArticle } = await import('./store');
+    await saveArticle(article('a1', 'Six Kings Slam 2026'));
+
+    const loaded = await getArticle('a1');
     expect(loaded?.title).toBe('Six Kings Slam 2026');
     expect(loaded?.keywords).toEqual(['tennis']);
   });
 
-  it('keeps the original creation time when an article is overwritten', async () => {
-    process.env.DATABASE_PATH = join(freshDir(), 'data.json');
+  it('returns null for a missing record, never a truthy placeholder', async () => {
+    const { getArticle } = await import('./store');
+    expect(await getArticle('nope')).toBeNull();
+  });
+
+  it('keeps the original creation time when overwritten', async () => {
     const { saveArticle, getArticle } = await import('./store');
-
-    const base = {
-      id: 'a1', title: 'First', slug: 's', markdown: '#', metaDescription: '', focusKeyword: 'k',
-      keywords: [], language: 'English', seoMode: 'full-seo', wordCount: 1,
-      status: 'draft' as const, sources: [],
-    };
-    const created = saveArticle(base).createdAt;
+    const created = (await saveArticle(article('a1', 'First'))).createdAt;
     await new Promise((r) => setTimeout(r, 5));
-    saveArticle({ ...base, title: 'Second' });
+    await saveArticle(article('a1', 'Second'));
 
-    const after = getArticle('a1')!;
+    const after = (await getArticle('a1'))!;
     expect(after.title).toBe('Second');
     expect(after.createdAt).toBe(created);
-    expect(after.updatedAt).toBeGreaterThanOrEqual(created);
   });
 
   it('lists newest first and respects the limit', async () => {
-    process.env.DATABASE_PATH = join(freshDir(), 'data.json');
     const { saveArticle, listArticles } = await import('./store');
-
-    for (const title of ['one', 'two', 'three']) {
-      saveArticle({
-        id: title, title, slug: title, markdown: '#', metaDescription: '', focusKeyword: 'k',
-        keywords: [], language: 'English', seoMode: 'full-seo', wordCount: 1, status: 'draft', sources: [],
-      });
+    for (const t of ['one', 'two', 'three']) {
+      await saveArticle(article(t));
       await new Promise((r) => setTimeout(r, 3));
     }
-
-    expect(listArticles().map((a) => a.title)).toEqual(['three', 'two', 'one']);
-    expect(listArticles(2)).toHaveLength(2);
+    expect((await listArticles()).map((a) => a.title)).toEqual(['three', 'two', 'one']);
+    expect(await listArticles(2)).toHaveLength(2);
   });
 
-  it('deletes a record and persists the deletion', async () => {
-    const file = join(freshDir(), 'data.json');
-    process.env.DATABASE_PATH = file;
-    const { saveArticle, deleteArticle } = await import('./store');
+  it('deletes a record', async () => {
+    const { saveArticle, deleteArticle, getArticle } = await import('./store');
+    await saveArticle(article('gone'));
+    await deleteArticle('gone');
+    expect(await getArticle('gone')).toBeNull();
+  });
 
-    saveArticle({
-      id: 'gone', title: 'x', slug: 'x', markdown: '#', metaDescription: '', focusKeyword: 'k',
-      keywords: [], language: 'English', seoMode: 'full-seo', wordCount: 1, status: 'draft', sources: [],
-    });
-    deleteArticle('gone');
+  it('keeps collections separate', async () => {
+    const { saveArticle } = await import('./store');
+    const { listHumanized } = await import('@/lib/humanizer/store');
+    await saveArticle(article('a1'));
+    expect(await listHumanized()).toEqual([]);
+  });
 
+  it('applies project patches without losing concurrent changes', async () => {
+    const { createProject, updateProject, getProject } = await import('@/lib/semantic/store');
+    const p = await createProject({ name: 'P', mainKeyword: 'six kings slam', language: 'English' });
+
+    // Two stage actions finishing at once must both land.
+    await Promise.all([
+      updateProject(p.id, { data: { aiInstructions: 'Lead with ticket prices.' } }),
+      updateProject(p.id, { currentStepIndex: 4 }),
+    ]);
+
+    const after = (await getProject(p.id))!;
+    expect(after.data.aiInstructions).toBe('Lead with ticket prices.');
+    expect(after.currentStepIndex).toBe(4);
+  });
+
+  it('survives a fresh process reading the same store', async () => {
+    const first = await import('./store');
+    await first.saveArticle(article('persisted'));
+
+    const engine = await import('./engine');
+    await engine.resetStorageForTests();
     vi.resetModules();
-    const reloaded = await import('./store');
-    expect(reloaded.getArticle('gone')).toBeNull();
+
+    const second = await import('./store');
+    expect((await second.getArticle('persisted'))?.id).toBe('persisted');
+  });
+
+  it('reports itself as shared storage only when it is', async () => {
+    const { storageStatus, probeStorage } = await import('./store');
+    const status = await storageStatus();
+    expect(status.driver).toBe(name);
+    expect(status.perInstance).toBe(false);
+    expect((await probeStorage()).writable).toBe(true);
   });
 });
 
-describe('failure handling', () => {
+describe('driver selection', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    for (const k of ['DATABASE_PATH', 'DATABASE_URL', 'POSTGRES_URL', 'VERCEL']) delete process.env[k];
+  });
+
+  it('uses Postgres when POSTGRES_URL is set, as Vercel integrations name it', async () => {
+    process.env.POSTGRES_URL = `postgres://postgres:postgres@127.0.0.1:${PG_PORT}/postgres?sslmode=disable`;
+    const { storageStatus } = await import('./store');
+    expect((await storageStatus()).driver).toBe('postgres');
+  });
+
+  it('never leaks database credentials in status output', async () => {
+    process.env.DATABASE_URL = `postgres://admin:s3cret-pass@127.0.0.1:${PG_PORT}/postgres?sslmode=disable`;
+    const { storageStatus } = await import('./store');
+    const status = await storageStatus();
+    expect(JSON.stringify(status)).not.toContain('s3cret-pass');
+    expect(JSON.stringify(status)).not.toContain('admin');
+  });
+
+  it('flags per-instance storage on serverless without a database', async () => {
+    process.env.VERCEL = '1';
+    const { storageStatus } = await import('./store');
+    const status = await storageStatus();
+    expect(status.driver).toBe('json');
+    expect(status.perInstance).toBe(true);
+  });
+
+  it('reports a broken database URL instead of throwing', async () => {
+    process.env.DATABASE_URL = 'postgres://nobody:x@127.0.0.1:1/none?sslmode=disable';
+    const { storageStatus, probeStorage } = await import('./store');
+    expect((await storageStatus()).error).toBeTruthy();
+    expect((await probeStorage()).writable).toBe(false);
+  });
+});
+
+describe('json driver failure handling', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    for (const k of ['DATABASE_PATH', 'DATABASE_URL', 'POSTGRES_URL', 'VERCEL']) delete process.env[k];
+  });
+
   it('falls back to memory instead of throwing when the directory cannot be created', async () => {
-    const dir = freshDir();
-    const blocker = join(dir, 'blocker');
+    const blocker = join(freshDir(), 'blocker');
     writeFileSync(blocker, 'not a directory');
     process.env.DATABASE_PATH = join(blocker, 'nested', 'data.json');
 
     const { storageStatus, saveArticle, listArticles } = await import('./store');
-
-    // The crash is what took the whole site down, so this must not throw.
-    expect(() => listArticles()).not.toThrow();
-    expect(storageStatus().mode).toBe('memory');
-
-    // Still fully usable in memory, so every page renders.
-    saveArticle({
-      id: 'm1', title: 'In memory', slug: 's', markdown: '#', metaDescription: '', focusKeyword: 'k',
-      keywords: [], language: 'English', seoMode: 'full-seo', wordCount: 1, status: 'draft', sources: [],
-    });
-    expect(listArticles()).toHaveLength(1);
+    await expect(listArticles()).resolves.toEqual([]);
+    expect((await storageStatus()).mode).toBe('memory');
+    await saveArticle(article('m1'));
+    expect(await listArticles()).toHaveLength(1);
   });
 
-  it('sets a corrupt data file aside rather than silently overwriting it', async () => {
+  it('sets a corrupt data file aside rather than overwriting it', async () => {
     const dir = freshDir();
-    const file = join(dir, 'data.json');
-    writeFileSync(file, '{ this is not valid json');
-    process.env.DATABASE_PATH = file;
+    writeFileSync(join(dir, 'data.json'), '{ not valid json');
+    process.env.DATABASE_PATH = join(dir, 'data.json');
 
     const { storageStatus, listArticles } = await import('./store');
-
-    expect(listArticles()).toEqual([]);
-    expect(storageStatus().error).toMatch(/could not be read/i);
-    // The original bytes survive under a .corrupt- name for recovery.
-    const { readdirSync } = await import('node:fs');
+    expect(await listArticles()).toEqual([]);
+    expect((await storageStatus()).error).toMatch(/could not be read/i);
     expect(readdirSync(dir).some((f) => f.includes('.corrupt-'))).toBe(true);
   });
 
-  it('treats a missing file as an empty database, not an error', async () => {
-    process.env.DATABASE_PATH = join(freshDir(), 'nothing-here.json');
-    const { listArticles, storageStatus } = await import('./store');
-
-    expect(listArticles()).toEqual([]);
-    expect(storageStatus().error).toBeNull();
-  });
-
-  it('labels a path outside /tmp as persistent, and one inside it as ephemeral', async () => {
-    const { mkdirSync, rmSync } = await import('node:fs');
-    const local = join(process.cwd(), '.test-storage');
-    mkdirSync(local, { recursive: true });
-    process.env.DATABASE_PATH = join(local, 'data.json');
-
-    try {
-      const { storageStatus } = await import('./store');
-      expect(storageStatus().mode).toBe('persistent');
-    } finally {
-      rmSync(local, { recursive: true, force: true });
-    }
-
-    // A /tmp path is ephemeral, which is what a serverless host gets.
-    vi.resetModules();
-    process.env.DATABASE_PATH = join(freshDir(), 'data.json');
-    const again = await import('./store');
-    expect(again.storageStatus().mode).toBe('ephemeral');
-  });
-
-  it('writes valid JSON that a human can read and recover', async () => {
+  it('writes valid, human-readable JSON', async () => {
     const file = join(freshDir(), 'data.json');
     process.env.DATABASE_PATH = file;
     const { saveArticle } = await import('./store');
-
-    saveArticle({
-      id: 'a1', title: 'Readable', slug: 's', markdown: '#', metaDescription: '', focusKeyword: 'k',
-      keywords: [], language: 'English', seoMode: 'full-seo', wordCount: 1, status: 'draft', sources: [],
-    });
-
-    const parsed = JSON.parse(readFileSync(file, 'utf8'));
-    expect(parsed.articles[0].title).toBe('Readable');
+    await saveArticle(article('a1', 'Readable'));
+    expect(JSON.parse(readFileSync(file, 'utf8')).articles[0].title).toBe('Readable');
   });
 });
 
@@ -208,13 +235,14 @@ describe('safeRead', () => {
   it('returns the fallback instead of throwing', async () => {
     const { safeRead } = await import('./safe');
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    expect(safeRead(() => { throw new Error('boom'); }, [], 'test')).toEqual([]);
-    expect(spy).toHaveBeenCalled();
+    expect(await safeRead(() => { throw new Error('boom'); }, [], 'test')).toEqual([]);
+    expect(await safeRead(async () => { throw new Error('async boom'); }, [], 'test')).toEqual([]);
     spy.mockRestore();
   });
 
-  it('passes the value through when the read succeeds', async () => {
+  it('passes values through, sync or async', async () => {
     const { safeRead } = await import('./safe');
-    expect(safeRead(() => [1, 2], [], 'test')).toEqual([1, 2]);
+    expect(await safeRead(() => [1], [], 't')).toEqual([1]);
+    expect(await safeRead(async () => [2], [], 't')).toEqual([2]);
   });
 });

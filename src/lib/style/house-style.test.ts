@@ -46,6 +46,21 @@ describe('house style, applied to our own UI', () => {
     expect(offenders).toEqual([]);
   });
 
+  it('uses no em dashes in strings anywhere in lib: progress messages, errors and prompts', () => {
+    // Progress logs reach the UI ("Checked 2 claims — 1 supported" did), and
+    // prompts teach the model by example, so both are held to the same rule.
+    const SKIP = /style\/(patterns|sanitize|detect)\.ts$|\.test\.ts$/;
+    const offenders: string[] = [];
+    for (const file of walk('src/lib', ['.ts']).filter((f) => !SKIP.test(f))) {
+      readFileSync(file, 'utf8').split('\n').forEach((line, i) => {
+        const t = line.trim();
+        const code = t.startsWith('*') || t.startsWith('//') || t.startsWith('/*') ? '' : line.split('//')[0]!;
+        if (code.includes('—') && /['"`]/.test(code)) offenders.push(`${file}:${i + 1}  ${line.trim().slice(0, 90)}`);
+      });
+    }
+    expect(offenders).toEqual([]);
+  });
+
   it('keeps the banned-phrase list out of our own copy too', () => {
     const banned = /\b(delve into|game-?changer|seamlessly|in today'?s digital age|rich tapestry)\b/i;
     const offenders: string[] = [];

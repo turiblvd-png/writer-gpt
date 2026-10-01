@@ -8,12 +8,15 @@ import { StorageBanner } from '@/components/storage-banner';
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Humanizer · Writer-GPT' };
 
-export default function HumanizerPage() {
+export default async function HumanizerPage() {
+  const articles = await safeRead(() => listArticles(50), [], 'listArticles');
+  const history = await safeRead(() => listHumanized(), [], 'listHumanized');
+
   return (
     <Shell banner={<StorageBanner />}>
       <HumanizerWorkspace
-        articles={safeRead(() => listArticles(50), [], 'listArticles').map((a) => ({ id: a.id, title: a.title, words: a.wordCount }))}
-        initialHistory={safeRead(() => listHumanized(), [], 'listHumanized')}
+        articles={articles.map((a) => ({ id: a.id, title: a.title, words: a.wordCount }))}
+        initialHistory={history}
       />
     </Shell>
   );

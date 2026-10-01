@@ -19,8 +19,8 @@ const FEATURES = [
   `${STEPS.length}-step workflow`,
 ];
 
-export default function SemanticLandingPage() {
-  const projects = safeRead(() => listProjects(), [], 'listProjects');
+export default async function SemanticLandingPage() {
+  const projects = await safeRead(() => listProjects(), [], 'listProjects');
 
   return (
     <Shell banner={<StorageBanner />}>

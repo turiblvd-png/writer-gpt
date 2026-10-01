@@ -8,8 +8,8 @@ import { StorageBanner } from '@/components/storage-banner';
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'My Articles · Writer-GPT' };
 
-export default function ArticlesPage() {
-  const articles = safeRead(() => listArticles(), [], 'listArticles');
+export default async function ArticlesPage() {
+  const articles = await safeRead(() => listArticles(), [], 'listArticles');
 
   return (
     <Shell banner={<StorageBanner />}>

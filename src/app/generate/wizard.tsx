@@ -40,42 +40,72 @@ export function GenerateWizard() {
 
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const esRef = useRef<EventSource | null>(null);
+  const [articleId, setArticleId] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
-  // A live EventSource must be torn down when the component unmounts, or the
-  // browser keeps the connection (and the run's subscriber) alive indefinitely.
-  useEffect(() => () => esRef.current?.close(), []);
+  // Leaving the page cancels the request, which stops the run on the server.
+  useEffect(() => () => abortRef.current?.abort(), []);
 
   const start = useCallback(async () => {
     setError(null);
     setSnapshot(null);
+    setArticleId(null);
     setStage(3);
 
-    let runId: string;
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     try {
       const res = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ topic, language, seoMode, targetWords, includeFaq, audience, notes }),
+        signal: controller.signal,
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? 'Could not start generation.');
-      runId = data.runId;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not start generation.');
-      return;
-    }
 
-    const es = new EventSource(`/api/runs/${runId}/stream`);
-    esRef.current = es;
-    es.addEventListener('snapshot', (e) => setSnapshot(JSON.parse((e as MessageEvent).data)));
-    es.addEventListener('end', () => es.close());
-    es.onerror = () => {
-      // The stream also closes normally on completion; only surface a genuine drop.
-      if (es.readyState === EventSource.CLOSED) return;
-      setError('Lost connection to the generation stream.');
-      es.close();
-    };
+      // Validation and configuration errors come back as plain JSON.
+      if (!res.ok || !res.body) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error ?? `Request failed (${res.status}).`);
+      }
+
+      // The run streams one JSON event per line for its whole duration.
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let finished = false;
+
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        let newline: number;
+        while ((newline = buffer.indexOf('\n')) !== -1) {
+          const line = buffer.slice(0, newline).trim();
+          buffer = buffer.slice(newline + 1);
+          if (!line) continue;
+
+          const event = JSON.parse(line) as { type: string; snapshot?: Snapshot; error?: string; articleId?: string | null };
+          if (event.snapshot) setSnapshot(event.snapshot);
+          if (event.type === 'done') {
+            finished = true;
+            setArticleId(event.articleId ?? null);
+          }
+          if (event.type === 'error') {
+            finished = true;
+            setError(event.error ?? 'Generation failed.');
+          }
+        }
+      }
+
+      if (!finished) {
+        throw new Error('The connection closed before the article finished. The host may have hit its time limit.');
+      }
+    } catch (err) {
+      if ((err as Error).name === 'AbortError') return;
+      setError(err instanceof Error ? err.message : 'Generation failed.');
+    }
   }, [topic, language, seoMode, targetWords, includeFaq, audience, notes]);
 
   if (stage === 3) {
@@ -84,7 +114,7 @@ export function GenerateWizard() {
         snapshot={snapshot}
         error={error}
         onRetry={() => { setStage(1); setSnapshot(null); setError(null); }}
-        onOpenArticles={() => router.push('/articles')}
+        onOpenArticles={() => router.push(articleId ? `/articles/${articleId}` : '/articles')}
       />
     );
   }
@@ -244,7 +274,7 @@ function RunProgress({
               ? error ?? snapshot?.error ?? 'Something went wrong.'
               : done
                 ? snapshot?.state?.meta?.seoTitle ?? 'Saved to your library.'
-                : 'Researching, then drafting from what it finds.'}
+                : 'Researching, then drafting from what it finds. Keep this tab open until it finishes.'}
           </p>
         </header>
 
@@ -304,7 +334,7 @@ function RunProgress({
         {(done || failed) && (
           <div className="mt-6 flex gap-3">
             <button className="btn-ghost flex-1" onClick={onRetry}>Write another</button>
-            {done && <button className="btn-primary flex-1" onClick={onOpenArticles}>Open library</button>}
+            {done && <button className="btn-primary flex-1" onClick={onOpenArticles}>Open article</button>}
           </div>
         )}
       </section>

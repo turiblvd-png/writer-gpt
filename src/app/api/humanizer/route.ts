@@ -35,7 +35,7 @@ export async function POST(request: Request) {
   // "My article" mode passes an id; resolve it server-side so the client never
   // has to ship the whole article body back up.
   if (input.sourceArticleId) {
-    const article = getArticle(input.sourceArticleId);
+    const article = await getArticle(input.sourceArticleId);
     if (!article) return NextResponse.json({ error: 'That article no longer exists.' }, { status: 404 });
     input.text = article.markdown;
     input.title = input.title || article.title;

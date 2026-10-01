@@ -6,6 +6,6 @@ export const dynamic = 'force-dynamic';
 
 export async function DELETE(_r: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  deleteRewritten(id);
+  await deleteRewritten(id);
   return NextResponse.json({ ok: true });
 }

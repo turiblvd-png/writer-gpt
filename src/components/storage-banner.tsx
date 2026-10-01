@@ -7,9 +7,10 @@ import { storageStatus } from '@/lib/db/store';
  * start, so articles and projects disappear without explanation. Saying so is
  * better than letting someone build a 14-stage project that vanishes.
  */
-export function StorageBanner() {
-  const { mode, error, perInstance } = storageStatus();
-  if (mode === 'persistent') return null;
+export async function StorageBanner() {
+  const { mode, error, perInstance } = await storageStatus();
+  // A shared database or a persistent disk needs no warning.
+  if (mode === 'persistent' || mode === 'postgres') return null;
 
   return (
     <div
@@ -27,10 +28,9 @@ export function StorageBanner() {
           : perInstance
             ? 'This host runs the app across separate instances that do not share a disk, so a project saved by one request can be invisible to the next. Creating a project may appear to fail even when it succeeded.'
             : 'This host only allows writes to a temporary directory, so saved work is lost whenever the server restarts.'}{' '}
-        The writing tools themselves work. To save work reliably, deploy to a host with a persistent disk
-        (Railway, Render, Fly, or a VPS) and set{' '}
-        <code className="rounded bg-surface-3 px-1 py-0.5 font-mono text-xs text-accent-2">DATABASE_PATH</code> to a
-        mounted volume.
+        The writing tools themselves work. To save work reliably, connect a Postgres database (on Vercel:
+        Storage, then create a Neon Postgres database, then redeploy) so{' '}
+        <code className="rounded bg-surface-3 px-1 py-0.5 font-mono text-xs text-accent-2">DATABASE_URL</code> is set.
       </p>
       {error && <p className="mt-1.5 font-mono text-[11px] text-ink-3">{error}</p>}
     </div>

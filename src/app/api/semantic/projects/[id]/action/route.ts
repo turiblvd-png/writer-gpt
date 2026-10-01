@@ -55,12 +55,12 @@ function run(id: string, action: string, body: { urls?: string[]; scope?: A.Enti
     case 'extract-content':      return A.extractCompetitorContent(id, body.urls);
     case 'analyse-style':        return A.analyseCompetitorStyle(id);
     case 'generate-entities':    return A.generateEntities(id, body.scope ?? 'all');
-    case 'compute-ngrams':       return Promise.resolve(A.computeNgrams(id));
-    case 'compute-keywords':     return Promise.resolve(A.computeNlpKeywords(id));
-    case 'compute-skipgrams':    return Promise.resolve(A.computeSkipGrams(id));
-    case 'recompute-all':        return Promise.resolve(A.recomputeAll(id));
+    case 'compute-ngrams':       return A.computeNgrams(id);
+    case 'compute-keywords':     return A.computeNlpKeywords(id);
+    case 'compute-skipgrams':    return A.computeSkipGrams(id);
+    case 'recompute-all':        return A.recomputeAll(id);
     case 'generate-questions':   return A.generateQuestions(id);
-    case 'compile-mega-prompt':  return Promise.resolve(compileMegaPrompt(id));
+    case 'compile-mega-prompt':  return compileMegaPrompt(id);
     case 'generate-article':     return A.generateArticle(id);
     default:
       throw new Error(`Unknown action "${action}".`);

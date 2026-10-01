@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const project = getProject(id);
+  const project = await getProject(id);
   if (!project) return NextResponse.json({ error: 'Project not found.' }, { status: 404 });
   return NextResponse.json({ project });
 }
@@ -23,7 +23,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: 'Request body must be JSON.' }, { status: 400 });
   }
 
-  const project = updateProject(id, {
+  const project = await updateProject(id, {
     data: body.data,
     currentStepIndex: body.currentStepIndex,
     completedSteps: body.completedSteps,
@@ -35,6 +35,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
 export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  deleteProject(id);
+  await deleteProject(id);
   return NextResponse.json({ ok: true });
 }

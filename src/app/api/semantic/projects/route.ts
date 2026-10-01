@@ -7,7 +7,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
-  return NextResponse.json({ projects: safeRead(() => listProjects(), [], 'listProjects') });
+  return NextResponse.json({ projects: await safeRead(() => listProjects(), [], 'listProjects') });
 }
 
 export async function POST(request: Request) {
@@ -26,5 +26,5 @@ export async function POST(request: Request) {
     );
   }
 
-  return NextResponse.json({ project: createProject(parsed.data) }, { status: 201 });
+  return NextResponse.json({ project: await createProject(parsed.data) }, { status: 201 });
 }
