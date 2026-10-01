@@ -303,7 +303,21 @@ const STYLE_THRESHOLD = 60;
  * deterministically (dashes, headings, paragraph length) and gets one style
  * repair only when it still reads as machine-written and time allows.
  */
-export async function writeArticlePart(id: string, runId: string, index: number): Promise<SemanticProject> {
+/** Thrown when joining finds parts that were never saved; carries their indexes so the page can write them. */
+export class MissingPartsError extends Error {
+  constructor(readonly missing: number[]) {
+    super(`Part ${missing.map((i) => i + 1).join(', ')} is not written yet.`);
+    this.name = 'MissingPartsError';
+  }
+}
+
+/** The server's plan for the article. The page writes exactly these parts, whatever its own code version. */
+export async function articlePlan(id: string): Promise<{ key: string; total: number; headings: string[] }> {
+  const plan = planParts(await load(id));
+  return { key: plan.key, total: plan.parts.length, headings: plan.parts.map((p) => p.headings[0]?.text ?? '') };
+}
+
+export async function writeArticlePart(id: string, runId: string, index: number, planKey?: string): Promise<SemanticProject> {
   const started = Date.now();
   const project = await load(id);
   if (!project.data.combinedOutline.length) {
@@ -312,6 +326,9 @@ export async function writeArticlePart(id: string, runId: string, index: number)
   if (!runId) throw new Error('Missing run id.');
   const clock = makeClock();
   const plan = planParts(project);
+  if (planKey && planKey !== plan.key) {
+    throw new Error('The outline or length changed while writing. Generate the article again.');
+  }
   const part = plan.parts[index];
   if (!part) throw new Error(`The article has ${plan.parts.length} parts; there is no part ${index + 1}.`);
 
@@ -374,8 +391,8 @@ export async function assembleArticle(id: string, runId: string): Promise<Semant
   if (draft.planKey !== plan.key) {
     throw new Error('The outline or length changed while writing. Generate the article again.');
   }
-  const missing = draft.parts.map((p, i) => (p ? -1 : i + 1)).filter((i) => i > 0);
-  if (missing.length) throw new Error(`Part ${missing.join(', ')} is not written yet.`);
+  const missing = draft.parts.map((p, i) => (p ? -1 : i)).filter((i) => i >= 0);
+  if (missing.length) throw new MissingPartsError(missing);
 
   const clock = makeClock();
   let markdown = sanitizeDraft(draft.parts.join('\n\n')).text.replace(/\n{3,}/g, '\n\n').trim();

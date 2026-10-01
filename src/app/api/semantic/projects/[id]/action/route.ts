@@ -11,7 +11,7 @@ export const maxDuration = 300;
 /** Actions that never call a model, so they work without an API key. */
 const LOCAL_ACTIONS = new Set([
   'extract-outlines', 'extract-content', 'compute-ngrams', 'compute-keywords',
-  'compute-skipgrams', 'recompute-all', 'compile-mega-prompt',
+  'compute-skipgrams', 'recompute-all', 'compile-mega-prompt', 'plan-article', 'assemble-article',
 ]);
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -35,11 +35,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   try {
+    if (action === 'plan-article') return NextResponse.json({ plan: await A.articlePlan(id) });
     const project = await run(id, action, body);
     return NextResponse.json({ project });
   } catch (err) {
     if (err instanceof A.ProjectNotFoundError) {
       return NextResponse.json({ error: err.message }, { status: 404 });
+    }
+    if (err instanceof A.MissingPartsError) {
+      return NextResponse.json({ error: err.message, missing: err.missing }, { status: 409 });
     }
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'Action failed.' },
@@ -54,6 +58,7 @@ interface Body {
   scope?: A.EntityScope;
   runId?: string;
   index?: number;
+  planKey?: string;
 }
 
 function run(id: string, action: string, body: Body) {
@@ -71,7 +76,7 @@ function run(id: string, action: string, body: Body) {
     case 'compile-mega-prompt':  return compileMegaPrompt(id);
     case 'research-facts':       return A.researchFacts(id);
     case 'research-facts-live':  return A.researchFacts(id, { live: true });
-    case 'write-part':           return A.writeArticlePart(id, String(body.runId ?? ''), Number(body.index ?? -1));
+    case 'write-part':           return A.writeArticlePart(id, String(body.runId ?? ''), Number(body.index ?? -1), body.planKey);
     case 'assemble-article':     return A.assembleArticle(id, String(body.runId ?? ''));
     case 'write-draft':          return A.writeDraft(id);
     case 'polish-article':       return A.polishArticle(id);

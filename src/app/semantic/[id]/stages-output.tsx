@@ -166,7 +166,9 @@ const CONCURRENCY = 10;
 
 type Flow = { label: string; done: number; total: number; startedAt: number };
 
-async function postAction(projectId: string, action: string, body: Record<string, unknown>) {
+type ActionReply = { ok: true; project?: SemanticProject; plan?: { key: string; total: number } } | { ok: false; error: string; missing?: number[] };
+
+async function postAction(projectId: string, action: string, body: Record<string, unknown> = {}): Promise<ActionReply> {
   try {
     const res = await fetch(`/api/semantic/projects/${projectId}/action`, {
       method: 'POST',
@@ -174,10 +176,10 @@ async function postAction(projectId: string, action: string, body: Record<string
       body: JSON.stringify({ action, ...body }),
     });
     const data = await readJson(res);
-    if (!res.ok) return { ok: false as const, error: String(data.error ?? 'Action failed.') };
-    return { ok: true as const, project: data.project as SemanticProject };
+    if (!res.ok) return { ok: false, error: String(data.error ?? 'Action failed.'), missing: Array.isArray(data.missing) ? data.missing : undefined };
+    return { ok: true, project: data.project as SemanticProject | undefined, plan: data.plan };
   } catch {
-    return { ok: false as const, error: 'Could not reach the server. Check your connection and try again.' };
+    return { ok: false, error: 'Could not reach the server. Check your connection and try again.' };
   }
 }
 
@@ -207,10 +209,9 @@ export function MasterPromptStage({ api, onNavigate }: { api: StageApi; onNaviga
   const running = Boolean(flow);
 
   const draft = project.data.draft;
-  const resumableParts = draft && draft.planKey === plan.key && draft.total === plan.parts.length ? draft : null;
-  const partsLeft = resumableParts ? resumableParts.parts.filter((p) => !p).length : 0;
+  const partsLeft = draft ? draft.parts.filter((p) => !p).length : 0;
   const stage = project.data.article?.stage;
-  const needsFinish = Boolean(stage && stage !== 'done') && !resumableParts;
+  const needsFinish = Boolean(stage && stage !== 'done') && !partsLeft;
 
   function fail(message: string) {
     setFlow(null);
@@ -243,44 +244,58 @@ export function MasterPromptStage({ api, onNavigate }: { api: StageApi; onNaviga
       await runAction('research-facts');
     }
 
-    const runId = resume && resumableParts ? resumableParts.runId : crypto.randomUUID();
-    const todo = plan.parts
-      .map((p) => p.index)
-      .filter((i) => !(resume && resumableParts?.parts[i]));
-    const total = plan.parts.length;
-    let done = total - todo.length;
+    // The server decides the plan, so a page left open across an update
+    // still writes exactly the parts the server will join.
+    const planned = await postAction(project.id, 'plan-article');
+    if (!planned.ok || !planned.plan) {
+      fail(planned.ok ? 'Could not plan the article. Try again.' : planned.error);
+      return;
+    }
+    const { key: planKey, total } = planned.plan;
+    const saved = resume && draft && draft.planKey === planKey && draft.total === total ? draft : null;
+    const runId = saved ? saved.runId : crypto.randomUUID();
+    let done = saved ? saved.parts.filter(Boolean).length : 0;
     let latest: SemanticProject | undefined;
     let lastError = '';
     setFlow({ label: `Writing ${total} parts at once`, done, total, startedAt });
 
-    const queue = [...todo];
-    const worker = async () => {
-      for (let i = queue.shift(); i !== undefined; i = queue.shift()) {
-        // One automatic retry per part before giving up on it.
-        let res = await postAction(project.id, 'write-part', { runId, index: i });
-        if (!res.ok) res = await postAction(project.id, 'write-part', { runId, index: i });
-        if (res.ok) {
-          done++;
-          if (filled(res.project) >= filled(latest)) latest = res.project;
-          setFlow((f) => (f ? { ...f, done } : f));
-        } else {
-          lastError = res.error;
+    const writeParts = async (indexes: number[]) => {
+      const queue = [...indexes];
+      const worker = async () => {
+        for (let i = queue.shift(); i !== undefined; i = queue.shift()) {
+          // One automatic retry per part before giving up on it.
+          let res = await postAction(project.id, 'write-part', { runId, index: i, planKey });
+          if (!res.ok && !/outline or length changed/i.test(res.error)) res = await postAction(project.id, 'write-part', { runId, index: i, planKey });
+          if (res.ok) {
+            done = Math.min(total, done + 1);
+            if (filled(res.project) >= filled(latest)) latest = res.project;
+            setFlow((f) => (f ? { ...f, done } : f));
+          } else {
+            lastError = res.error;
+          }
         }
-      }
+      };
+      await Promise.all(Array.from({ length: Math.min(CONCURRENCY, indexes.length) }, worker));
     };
-    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, todo.length) }, worker));
+
+    await writeParts(Array.from({ length: total }, (_, i) => i).filter((i) => !saved?.parts[i]));
     if (latest) setProject(latest);
 
-    if (done < total) {
-      fail(`${total - done} of ${total} parts could not be written. ${lastError} Everything written so far is saved.`);
-      return;
-    }
-
     setFlow({ label: 'Joining the parts and checking the brief', done: total, total, startedAt });
-    if (!(await runAction('assemble-article', { runId }))) {
-      fail('The parts were written but could not be joined. Try again.');
+    let joined = await postAction(project.id, 'assemble-article', { runId });
+    // A part that failed or never saved is written again, once, then joined.
+    if (!joined.ok && joined.missing?.length) {
+      done = total - joined.missing.length;
+      setFlow({ label: `Writing ${joined.missing.length} remaining part(s)`, done, total, startedAt });
+      await writeParts(joined.missing);
+      joined = await postAction(project.id, 'assemble-article', { runId });
+    }
+    if (!joined.ok) {
+      if (latest) setProject(latest);
+      fail(`${joined.error}${lastError && lastError !== joined.error ? ` Last error: ${lastError}` : ''} Everything written so far is saved.`);
       return;
     }
+    if (joined.project) setProject(joined.project);
     await finish(startedAt);
   }
 
@@ -376,7 +391,7 @@ export function MasterPromptStage({ api, onNavigate }: { api: StageApi; onNaviga
 
       {!running && partsLeft > 0 && (
         <Notice tone="warn">
-          {plan.parts.length - partsLeft} of {plan.parts.length} parts are written and saved.{' '}
+          {draft!.total - partsLeft} of {draft!.total} parts are written and saved.{' '}
           <button className="font-semibold text-accent underline" onClick={() => void runFlow(true)}>
             Write the remaining {partsLeft}
           </button>
