@@ -36,6 +36,12 @@ The developer dashboard (`/admin`) holds:
   order that takes over when one fails.
 - **Subscribers**: accounts, plan, last activity, articles, AI requests and
   estimated AI cost this month; suspend, delete, change plan or role.
+- **Plans & Limits**: monthly AI request allowance per plan, a per-person
+  override (Subscribers page), and a monthly AI budget cap. The developer and
+  admins are never limited.
+- **Activity**: every AI request (who, tool, task, provider, model, stand-in
+  model, tokens, cost, time, result), sign-ins and dashboard changes, live,
+  filterable, kept 90 days. API keys are never logged.
 - **Menu & Tools**: drag tools into order and hide tools from subscribers.
 - **Setup & Health**: database, keys and deployment checklist.
 

@@ -35,7 +35,7 @@ export function SubscribersWorkspace({
     cost: rows.reduce((s, r) => s + r.usage.costUsd, 0),
   };
 
-  async function patch(id: string, body: Record<string, string>) {
+  async function patch(id: string, body: Record<string, string | number | null>) {
     setError(null);
     const res = await fetch(`/api/admin/users/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     const data = await res.json().catch(() => ({}));
@@ -88,12 +88,12 @@ export function SubscribersWorkspace({
       {error && <Notice tone="bad">{error}</Notice>}
 
       <div className="card overflow-x-auto">
-        <table className="w-full min-w-[960px] text-sm">
+        <table className="w-full min-w-[1080px] text-sm">
           <thead className="border-b border-line text-left text-[11px] uppercase tracking-wider text-ink-3">
             <tr>
               <th className="p-3">Person</th><th className="p-3">Plan</th><th className="p-3">Role</th><th className="p-3">Status</th>
               <th className="p-3">Joined</th><th className="p-3">Last active</th><th className="p-3 text-right">Articles</th>
-              <th className="p-3 text-right">AI requests</th><th className="p-3 text-right">Est. cost</th><th className="p-3" />
+              <th className="p-3 text-right">AI requests</th><th className="p-3">Monthly limit</th><th className="p-3 text-right">Est. cost</th><th className="p-3" />
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
@@ -132,7 +132,18 @@ export function SubscribersWorkspace({
                   <td className="p-3 text-xs text-ink-3">{new Date(r.createdAt).toLocaleDateString()}</td>
                   <td className="p-3 text-xs text-ink-3">{ago(r.lastSeenAt)}</td>
                   <td className="p-3 text-right font-mono">{r.articles}</td>
-                  <td className="p-3 text-right font-mono">{r.usage.requests}</td>
+                  <td className="p-3 text-right font-mono">
+                    <span className={r.limit !== null && r.usage.requests >= r.limit ? 'text-bad' : ''}>{r.usage.requests}</span>
+                  </td>
+                  <td className="p-3">
+                    {r.limitSource === 'unlimited' ? <span className="text-xs text-ink-3">Unlimited</span> : (
+                      <LimitInput
+                        value={r.limitSource === 'custom' ? r.limit : null}
+                        planLimit={r.limitSource === 'plan' ? r.limit : null}
+                        onSave={(v) => void patch(r.id, { requestLimit: v })}
+                      />
+                    )}
+                  </td>
                   <td className="p-3 text-right font-mono">${r.usage.costUsd.toFixed(3)}</td>
                   <td className="p-3 text-right">
                     {!isOwner && !self && (
@@ -150,7 +161,7 @@ export function SubscribersWorkspace({
               );
             })}
             {shown.length === 0 && (
-              <tr><td colSpan={10} className="p-6 text-center text-ink-3">No accounts match.</td></tr>
+              <tr><td colSpan={11} className="p-6 text-center text-ink-3">No accounts match.</td></tr>
             )}
           </tbody>
         </table>
@@ -159,5 +170,23 @@ export function SubscribersWorkspace({
         Plans are labels for now. Card payments (Stripe) and plan limits are the next step; until then, set a subscriber&apos;s plan here by hand.
       </p>
     </>
+  );
+}
+
+/** Blank means "use the plan's allowance"; a number gives this person their own. */
+function LimitInput({ value, planLimit, onSave }: { value: number | null; planLimit: number | null; onSave: (v: number | null) => void }) {
+  const [text, setText] = useState(value === null ? '' : String(value));
+  const commit = () => {
+    const next = text.trim() === '' ? null : Math.max(0, Math.floor(Number(text)) || 0);
+    if (next !== value) onSave(next);
+  };
+  return (
+    <input
+      className="field w-28 py-1 text-xs" inputMode="numeric" value={text}
+      onChange={(e) => setText(e.target.value.replace(/[^\d]/g, ''))}
+      onBlur={commit} onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+      placeholder={planLimit === null ? 'Plan: unlimited' : `Plan: ${planLimit}`}
+      title="Leave empty to use the plan's allowance" aria-label="Monthly AI request limit"
+    />
   );
 }

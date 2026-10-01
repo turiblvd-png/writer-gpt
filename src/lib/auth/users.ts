@@ -29,6 +29,8 @@ interface UserRecord {
   plan: Plan;
   createdAt: number;
   lastSeenAt: number;
+  /** Monthly AI request allowance for this person; absent or null means their plan's. */
+  requestLimit?: number | null;
 }
 
 export type PublicUser = Omit<UserRecord, 'passwordHash'>;
@@ -169,7 +171,10 @@ export async function listUsers(): Promise<PublicUser[]> {
   return (await users.list('createdAt', 1000)).map(toPublic);
 }
 
-export async function updateUser(id: string, patch: { status?: UserStatus; plan?: Plan; role?: Role }): Promise<PublicUser | null> {
+export async function updateUser(
+  id: string,
+  patch: { status?: UserStatus; plan?: Plan; role?: Role; requestLimit?: number | null },
+): Promise<PublicUser | null> {
   const target = await users.get(id);
   if (!target) return null;
   if (target.role === 'owner' && (patch.status === 'suspended' || (patch.role && patch.role !== 'owner'))) {
@@ -181,6 +186,9 @@ export async function updateUser(id: string, patch: { status?: UserStatus; plan?
     ...(patch.status ? { status: patch.status } : {}),
     ...(patch.plan && PLANS.includes(patch.plan) ? { plan: patch.plan } : {}),
     ...(patch.role ? { role: patch.role } : {}),
+    ...('requestLimit' in patch
+      ? { requestLimit: patch.requestLimit === null || patch.requestLimit === undefined ? null : Math.max(0, Math.floor(Number(patch.requestLimit)) || 0) }
+      : {}),
   }));
   return next ? toPublic(next) : null;
 }

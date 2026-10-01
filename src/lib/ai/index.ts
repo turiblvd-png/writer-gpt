@@ -2,7 +2,9 @@ import { createHash } from 'node:crypto';
 import { GeminiProvider, OpenAiCompatProvider } from './gemini';
 import type { CompletionRequest, CompletionResult, LlmProvider, ProviderId } from './types';
 import { apiKeyFor, getAiSettings, PROVIDERS, ROLES, type ModelRole } from '@/lib/platform/settings';
-import { recordUsage } from '@/lib/usage/meter';
+import { estimateCost, recordUsage } from '@/lib/usage/meter';
+import { assertWithinLimits } from '@/lib/usage/limits';
+import { logActivity } from '@/lib/activity/log';
 
 export * from './types';
 export type { ModelRole };
@@ -131,7 +133,16 @@ async function attempt(binding: RoleBinding, req: CompletionRequest, retries: nu
  * the dashboard's fallback order, so one broken key does not stop the product.
  */
 export async function complete(role: ModelRole, req: CompletionRequest, opts: { retries?: number } = {}): Promise<CompletionResult> {
+  const started = Date.now();
   const retries = opts.retries ?? 3;
+
+  try {
+    await assertWithinLimits();
+  } catch (err) {
+    await logActivity({ kind: 'ai', action: 'ai.blocked', role, ok: false, error: err instanceof Error ? err.message : String(err) });
+    throw err;
+  }
+
   const settings = await getAiSettings();
   const primary = await resolveBinding(role);
 
@@ -159,11 +170,24 @@ export async function complete(role: ModelRole, req: CompletionRequest, opts: { 
     try {
       const result = await attempt(binding, request, chosen ? retries : 1);
       await recordUsage(result.provider, result.model, result.usage);
+      const intended = `${primary.provider}:${primary.model}`;
+      const used = `${result.provider}:${result.model}`;
+      await logActivity({
+        kind: 'ai', action: 'ai.request', role, ok: true,
+        provider: result.provider, model: result.model,
+        ...(used !== intended ? { fallbackFrom: intended } : {}),
+        input: result.usage.input, output: result.usage.output,
+        costUsd: estimateCost(result.model, result.usage), ms: Date.now() - started,
+        ...(request.grounded === false && req.grounded ? { detail: 'ran without live search' } : {}),
+      });
       return result;
     } catch (err) {
       if (req.signal?.aborted) throw err;
       const message = err instanceof Error ? err.message : String(err);
-      if (REQUEST_FAULT.test(message)) throw err;
+      if (REQUEST_FAULT.test(message)) {
+        await logActivity({ kind: 'ai', action: 'ai.request', role, ok: false, provider: binding.provider, model: binding.model, ms: Date.now() - started, error: message });
+        throw err;
+      }
       firstError ??= err;
       failures.push(`${binding.provider}: ${message}`);
     }
@@ -173,6 +197,10 @@ export async function complete(role: ModelRole, req: CompletionRequest, opts: { 
   const others = failures.slice(1);
   const error = new Error(others.length ? `${primaryMessage} Fallbacks also failed. ${others.join(' | ')}` : primaryMessage);
   if (firstError instanceof Error) error.name = firstError.name;
+  await logActivity({
+    kind: 'ai', action: 'ai.request', role, ok: false,
+    provider: primary.provider, model: primary.model, ms: Date.now() - started, error: error.message,
+  });
   throw error;
 }
 
@@ -218,10 +246,12 @@ export async function testProvider(binding: RoleBinding): Promise<{ ok: boolean;
   try {
     const provider = await buildProvider(binding);
     const res = await provider.complete({ prompt: 'Reply with the single word OK.', temperature: 0, exact: true });
+    await logActivity({ kind: 'admin', action: 'admin.ai_test', ok: true, provider: binding.provider, model: res.model, ms: Date.now() - started });
     return { ok: true, ms: Date.now() - started, reply: res.text.trim().slice(0, 80), model: res.model };
   } catch (err) {
     const cause = (err as { cause?: unknown }).cause;
     const raw = String((cause as Error)?.message ?? cause ?? '').slice(0, 600);
+    await logActivity({ kind: 'admin', action: 'admin.ai_test', ok: false, provider: binding.provider, model: binding.model, ms: Date.now() - started, error: err instanceof Error ? err.message : String(err) });
     return { ok: false, ms: Date.now() - started, error: err instanceof Error ? err.message : String(err), raw: raw || undefined };
   }
 }

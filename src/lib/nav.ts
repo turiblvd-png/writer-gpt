@@ -6,7 +6,7 @@
 export type IconName =
   | 'grid' | 'spark' | 'robot' | 'library' | 'globe' | 'gear' | 'hub' | 'wand' | 'link'
   | 'bolt' | 'chat' | 'radar' | 'key' | 'clipboard' | 'chart' | 'doc' | 'share' | 'calendar' | 'upload' | 'user'
-  | 'shield' | 'users' | 'drag';
+  | 'shield' | 'users' | 'drag' | 'list';
 
 export interface NavItem {
   href: string;
@@ -76,6 +76,8 @@ export const NAV: NavSection[] = [
       { href: '/admin', label: 'Overview', icon: 'grid', description: 'Subscribers, usage and AI spend at a glance.' },
       { href: '/admin/ai', label: 'AI Models', icon: 'robot', description: 'API keys, models per task and fallback order.' },
       { href: '/admin/subscribers', label: 'Subscribers', icon: 'users', description: 'Everyone who signed up, their plan and usage.' },
+      { href: '/admin/limits', label: 'Plans & Limits', icon: 'key', description: 'Monthly AI allowance per plan and a spending cap.' },
+      { href: '/admin/activity', label: 'Activity', icon: 'list', description: 'Every AI request, sign-in and change, as it happens.' },
       { href: '/admin/navigation', label: 'Menu & Tools', icon: 'drag', description: 'Drag to reorder tools; hide tools from subscribers.' },
       { href: '/admin/setup', label: 'Setup & Health', icon: 'gear', description: 'Database, keys and deployment checklist.' },
     ],

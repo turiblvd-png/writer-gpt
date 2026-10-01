@@ -12,7 +12,7 @@ const ICONS: Record<IconName, (p: { className?: string }) => React.ReactElement>
   gear: I.IconGear, hub: I.IconHub, wand: I.IconWand, link: I.IconLink, bolt: I.IconBolt, chat: I.IconChat,
   radar: I.IconRadar, key: I.IconKey, clipboard: I.IconClipboard, chart: I.IconChart, doc: I.IconDoc,
   share: I.IconShare, calendar: I.IconCalendar, upload: I.IconUpload, user: I.IconUser,
-  shield: I.IconShield, users: I.IconUsers, drag: I.IconDrag,
+  shield: I.IconShield, users: I.IconUsers, drag: I.IconDrag, list: I.IconList,
 };
 
 export function Icon({ name, className }: { name: IconName; className?: string }) {

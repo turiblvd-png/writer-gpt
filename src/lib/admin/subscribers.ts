@@ -2,15 +2,19 @@ import { listUsers, type PublicUser } from '@/lib/auth/users';
 import { usageForMonth, type UsageDoc } from '@/lib/usage/meter';
 import { collection } from '@/lib/db/engine';
 import { runAs } from '@/lib/auth/actor';
+import { getLimits } from '@/lib/usage/limits';
 
 export interface SubscriberRow extends PublicUser {
   usage: Pick<UsageDoc, 'requests' | 'input' | 'output' | 'costUsd'>;
   articles: number;
+  /** This month's allowance in AI requests; null is unlimited. */
+  limit: number | null;
+  limitSource: 'plan' | 'custom' | 'unlimited';
 }
 
 /** Every account with this month's AI usage and article count, for the dashboard. */
 export async function subscriberRows(): Promise<SubscriberRow[]> {
-  const [users, usage] = await Promise.all([listUsers(), usageForMonth()]);
+  const [users, usage, limits] = await Promise.all([listUsers(), usageForMonth(), getLimits()]);
   // Counted as the system, which sees every user's articles.
   const articles = await runAs(null, () => collection<{ id: string; ownerId?: string }>('articles').all());
   const owner = users.find((u) => u.role === 'owner');
@@ -25,6 +29,11 @@ export async function subscriberRows(): Promise<SubscriberRow[]> {
       ...u,
       usage: { requests: doc?.requests ?? 0, input: doc?.input ?? 0, output: doc?.output ?? 0, costUsd: doc?.costUsd ?? 0 },
       articles: counts.get(u.id) ?? 0,
+      ...(u.role === 'owner' || u.role === 'admin'
+        ? { limit: null, limitSource: 'unlimited' as const }
+        : u.requestLimit !== undefined && u.requestLimit !== null
+          ? { limit: u.requestLimit, limitSource: 'custom' as const }
+          : { limit: limits.plans[u.plan] ?? null, limitSource: 'plan' as const }),
     };
   });
 }

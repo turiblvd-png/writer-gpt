@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { Shell, PageHeader } from '@/components/shell';
 import { getViewer } from '@/lib/auth/viewer';
 import { usageFor } from '@/lib/usage/meter';
+import { allowanceFor } from '@/lib/usage/limits';
 import { listArticles } from '@/lib/db/store';
 import { safeRead } from '@/lib/db/safe';
 import { SignOutButton } from './sign-out';
@@ -15,6 +16,7 @@ export default async function AccountPage() {
   const user = viewer.user;
   const usage = user ? await safeRead(() => usageFor(user.id), null, 'usageFor') : null;
   const articles = await safeRead(() => listArticles(1000), [], 'listArticles');
+  const allowance = user ? await safeRead(() => allowanceFor(user.id), null, 'allowanceFor') : null;
   const month = new Date().toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
 
   return (
@@ -47,7 +49,12 @@ export default async function AccountPage() {
           <h3 className="mb-3 font-bold">Usage in {month}</h3>
           <dl className="space-y-2 text-sm">
             <Row label="Articles in your library" value={articles.length.toLocaleString()} />
-            <Row label="AI requests" value={(usage?.requests ?? 0).toLocaleString()} />
+            <Row label="AI requests" value={`${(usage?.requests ?? 0).toLocaleString()}${allowance?.limit != null ? ` of ${allowance.limit.toLocaleString()}` : ''}`} />
+            {allowance?.limit != null && (
+              <div className="h-2 overflow-hidden rounded-full bg-surface-3">
+                <div className={`h-full ${allowance.used >= allowance.limit ? 'bg-bad' : 'bg-accent'}`} style={{ width: `${Math.min(100, (allowance.used / Math.max(1, allowance.limit)) * 100)}%` }} />
+              </div>
+            )}
             <Row label="Words read and written by AI" value={Math.round(((usage?.input ?? 0) + (usage?.output ?? 0)) * 0.75).toLocaleString()} />
           </dl>
         </section>

@@ -115,3 +115,49 @@ describe('AI router', () => {
     await expect(complete('draft', { prompt: 'x' })).rejects.toThrow(/No gemini API key/);
   });
 });
+
+describe('limits and activity', () => {
+  it('stops a subscriber at their monthly allowance, but never the developer', async () => {
+    process.env.GEMINI_API_KEY = 'g';
+    const { signUp, updateUser } = await import('@/lib/auth/users');
+    const { updateLimits } = await import('@/lib/usage/limits');
+    const { runAs } = await import('@/lib/auth/actor');
+    const { complete } = await import('./index');
+    const sub = await signUp({ email: 'reader@example.com', password: 'longenough' });
+    await updateLimits({ plans: { free: 2, pro: 10, business: null } });
+    const asSub = { id: sub.id, email: sub.email, role: 'subscriber' as const };
+
+    await runAs(asSub, () => complete('draft', { prompt: '1' }));
+    await runAs(asSub, () => complete('draft', { prompt: '2' }));
+    await expect(runAs(asSub, () => complete('draft', { prompt: '3' }))).rejects.toThrow(/used all 2 AI requests/);
+    expect(calls).toHaveLength(2);
+
+    // A personal override beats the plan.
+    await updateUser(sub.id, { requestLimit: 5 });
+    await runAs(asSub, () => complete('draft', { prompt: '4' }));
+
+    const owner = { id: 'owner-id', email: 'turi.ishtiaq@gmail.com', role: 'owner' as const };
+    await updateLimits({ budgetUsd: 0 });
+    await runAs(owner, () => complete('draft', { prompt: 'owner is never limited' }));
+    await expect(runAs(asSub, () => complete('draft', { prompt: 'over budget' }))).rejects.toThrow(/AI budget/);
+  });
+
+  it('logs every request with who, model, tokens, cost and result', async () => {
+    process.env.GEMINI_API_KEY = 'g';
+    process.env.DEEPSEEK_API_KEY = 'd';
+    behaviour.gemini = () => new Error('Google rejected the Gemini API key.');
+    const { runAs } = await import('@/lib/auth/actor');
+    const { complete } = await import('./index');
+    const { listActivity } = await import('@/lib/activity/log');
+    const me = { id: 'u9', email: 'me@x.co', role: 'owner' as const };
+    await runAs(me, () => complete('draft', { prompt: 'x' }, { retries: 0 }));
+    behaviour.deepseek = () => new Error('DeepSeek rejected the API key.');
+    await expect(runAs(me, () => complete('draft', { prompt: 'y' }, { retries: 0 }))).rejects.toThrow();
+
+    const [failed, ok] = await listActivity({ kind: 'ai' });
+    expect(ok).toMatchObject({ ok: true, userId: 'u9', email: 'me@x.co', provider: 'deepseek', fallbackFrom: 'gemini:gemini-2.5-flash', input: 10, output: 20, role: 'draft' });
+    expect(ok!.costUsd).toBeGreaterThan(0);
+    expect(failed).toMatchObject({ ok: false, userId: 'u9' });
+    expect(failed!.error).toMatch(/rejected/);
+  });
+});

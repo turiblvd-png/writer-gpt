@@ -1,9 +1,16 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { authEnabled, isAdminPath, isAdminRole, isPublicPath, SESSION_COOKIE, verifySessionToken } from '@/lib/auth/session';
 
+/** Passes the request on, tagged with its path so the activity log can name the tool. */
+function pass(request: NextRequest): NextResponse {
+  const headers = new Headers(request.headers);
+  headers.set('x-wg-path', request.nextUrl.pathname);
+  return NextResponse.next({ request: { headers } });
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
-  if (!authEnabled() || isPublicPath(pathname)) return NextResponse.next();
+  if (!authEnabled() || isPublicPath(pathname)) return pass(request);
 
   const session = await verifySessionToken(request.cookies.get(SESSION_COOKIE)?.value);
   const isApi = pathname.startsWith('/api/');
@@ -20,7 +27,7 @@ export async function middleware(request: NextRequest) {
     if (isApi) return NextResponse.json({ error: 'Developer access only.' }, { status: 403 });
     return NextResponse.redirect(new URL('/', request.url));
   }
-  return NextResponse.next();
+  return pass(request);
 }
 
 export const config = {

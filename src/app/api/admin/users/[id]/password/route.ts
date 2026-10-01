@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { adminOnly } from '@/lib/auth/admin-route';
 import { resetPasswordByAdmin } from '@/lib/auth/users';
+import { logActivity } from '@/lib/activity/log';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -9,6 +10,8 @@ export const dynamic = 'force-dynamic';
 export function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   return adminOnly(async () => {
     const { id } = await params;
-    return NextResponse.json({ password: await resetPasswordByAdmin(id) });
+    const password = await resetPasswordByAdmin(id);
+    await logActivity({ kind: 'admin', action: 'admin.user_password_reset', ok: true, detail: id });
+    return NextResponse.json({ password });
   });
 }

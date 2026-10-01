@@ -36,8 +36,9 @@ describe('quota parsing', () => {
 });
 
 const generateContent = vi.fn();
+const listed: { name: string; supportedActions: string[] }[] = [];
 vi.mock('@google/genai', () => ({
-  GoogleGenAI: class { models = { generateContent: (...a: unknown[]) => generateContent(...a), list: async () => [] }; },
+  GoogleGenAI: class { models = { generateContent: (...a: unknown[]) => generateContent(...a), list: async () => listed }; },
 }));
 const ok = (text: string) => ({ text, candidates: [{}], usageMetadata: {} });
 
@@ -45,6 +46,23 @@ describe('Gemini provider under quota pressure', () => {
   beforeEach(async () => {
     vi.resetModules();
     generateContent.mockReset();
+    listed.length = 0;
+  });
+
+  it('finds the newer Flash a key can use when Pro has no quota and 2.5 Flash is withheld', async () => {
+    listed.push(
+      { name: 'models/gemini-3.1-pro', supportedActions: ['generateContent'] },
+      { name: 'models/gemini-3.1-flash', supportedActions: ['generateContent'] },
+      { name: 'models/gemini-3.1-flash-preview-0901', supportedActions: ['generateContent'] },
+    );
+    generateContent.mockImplementation(async ({ model }: { model: string }) => {
+      if (/pro/.test(model)) throw apiError(PRO_ZERO, 429);
+      if (model.startsWith('gemini-2.5')) throw apiError('models/gemini-2.5-flash is no longer available to new users. NOT_FOUND', 404);
+      return ok(`from ${model}`);
+    });
+    const { GeminiProvider } = await import('./gemini');
+    const res = await new GeminiProvider('key', 'gemini-2.5-pro').complete({ prompt: 'x' });
+    expect(res.text).toBe('from gemini-3.1-flash');
   });
 
   it('answers with Flash when Pro has no quota, and stops asking Pro', async () => {

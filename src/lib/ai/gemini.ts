@@ -55,7 +55,7 @@ export class GeminiProvider implements LlmProvider {
     for (const model of order) {
       try {
         const result = await this.callResolving(model, req, model === primary);
-        if (model !== primary) console.warn(`[gemini] ${primary} is out of quota; answered with ${model}.`);
+        if (result.model !== primary) console.warn(`[gemini] ${primary} could not answer; answered with ${result.model}.`);
         return result;
       } catch (err) {
         if (isQuotaError(err)) {
@@ -86,22 +86,23 @@ export class GeminiProvider implements LlmProvider {
 
   /** Calls a model; for the primary, swaps in a live replacement if the ID was retired. */
   private async callResolving(model: string, req: CompletionRequest, isPrimary: boolean): Promise<CompletionResult> {
+    const target = replacements.get(model) ?? model;
     try {
-      return await this.call(model, req);
+      return await this.call(target, req);
     } catch (err) {
-      // A retired model ID returns NOT_FOUND on every call. Rather than fail the
-      // whole product, find the best live model of the same tier and retry once.
-      if (isPrimary && !this.resolved && isModelNotFound(err)) {
-        const replacement = await discoverModel(this.client, tierOf(this.model));
-        if (replacement && replacement !== model) {
-          this.resolved = replacement;
-          console.warn(`[gemini] "${model}" is unavailable, using "${replacement}" instead.`);
-          return await this.call(replacement, req);
-        }
-      }
-      throw err;
+      // A retired model ID returns NOT_FOUND on every call, and Google also
+      // withdraws older models from new keys. Rather than fail, find the best
+      // live model of the same family this key can use, and remember it.
+      if (!isModelNotFound(err)) throw err;
+      const replacement = await discoverModel(this.client, tierOf(model));
+      if (!replacement || replacement === target) throw err;
+      replacements.set(model, replacement);
+      if (isPrimary) this.resolved = replacement;
+      console.warn(`[gemini] "${model}" is unavailable to this key, using "${replacement}" instead.`);
+      return await this.call(replacement, req);
     }
   }
+
 
   private async call(model: string, req: CompletionRequest): Promise<CompletionResult> {
     // Gemini rejects responseMimeType=json together with search tools. Rather
@@ -174,6 +175,9 @@ export class QuotaExceededError extends Error {
 }
 
 let discovered: { at: number; names: string[] } | null = null;
+
+/** Retired or withheld model ID → the live model used instead, for this key. */
+const replacements = new Map<string, string>();
 
 /** Lists models the key can use, cached for an hour, and picks the best for a tier. */
 async function discoverModel(client: GoogleGenAI, tier: 'pro' | 'flash'): Promise<string | null> {

@@ -4,6 +4,7 @@ import { AuthError, signUp } from '@/lib/auth/users';
 import { withSession } from '@/lib/auth/http';
 import { getPlatformSettings } from '@/lib/platform/settings';
 import { ownerEmail } from '@/lib/auth/session';
+import { logActivity } from '@/lib/activity/log';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -25,6 +26,7 @@ export async function POST(request: Request) {
       name: typeof body?.name === 'string' ? body.name : '',
       setupCode: typeof body?.setupCode === 'string' ? body.setupCode : '',
     });
+    await logActivity({ kind: 'auth', action: 'auth.signup', ok: true, userId: user.id, email: user.email, detail: user.role });
     return withSession(NextResponse.json({ ok: true, user }), user);
   } catch (err) {
     if (err instanceof AuthError) return NextResponse.json({ error: err.message }, { status: err.status });
